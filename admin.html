@@ -143,7 +143,7 @@ main{max-width:1250px;margin:0 auto;padding:25px clamp(12px,3vw,28px)}.notice{pa
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
-const DEFAULT_API="https://script.google.com/macros/s/AKfycbxHUc58l6dqttLAGaAkPdK5IQxIAMCeOQwMlso0lmiCasjurGlammjV2rTgJTqPQStq/exec";localStorage.setItem("apiUrl",DEFAULT_API);const API=()=>DEFAULT_API,TOKEN=()=>localStorage.getItem("token");
+const DEFAULT_API="https://script.google.com/macros/s/AKfycbxPQh9gT-5wKsMNQQzD7qupZXxMrltanLSAiC6pl95Td2bWyqxUL2UW_OE9l5LYGsB9/exec";localStorage.setItem("apiUrl",DEFAULT_API);const API=()=>DEFAULT_API,TOKEN=()=>localStorage.getItem("token");
 let currentUser=null,users=[],pages=[],menus=[],editing=null,modalType=null,permissions=[];
 let quill;
 
@@ -319,6 +319,8 @@ function openPageModal(page=null){
  <div class="two"><div class="field"><label for="fArquivo">Arquivo HTML</label><input id="fArquivo" data-field="arquivo" placeholder="exemplo.html"></div><div class="field"><label for="fIcone">Ícone</label><input id="fIcone" list="icones" data-field="icone" placeholder="📊" maxlength="12"></div></div>
  <div class="field"><label for="fUrl">URL externa (opcional)</label><input id="fUrl" data-field="url" type="url" placeholder="https://..."><small>Se preenchida, a URL será usada em vez do arquivo.</small></div><div class="field"><label for="fDescricao">Descrição curta / resumo da atualização</label><input id="fDescricao" data-field="descricao" maxlength="220" placeholder="Ex.: Novo painel de análise e correções no relatório."><small>Será usada no bloco de últimas atualizações do portal.</small></div>
  <div class="two"><div class="field"><label for="fMenu">Menu principal (Obrigatório)</label><select id="fMenu" data-field="menu" required><option value="">Selecione...</option>${menuOptions}</select></div><div class="field"><label for="fSubmenu">Submenu (opcional)</label><input id="fSubmenu" data-field="submenu" placeholder="Ex.: BPP 2026"><small>Opcional. O caminho será Análise › BPP 2026.</small></div></div>
+ <div class="field"><label for="fApi">API da página (Apps Script /exec)</label><input id="fApi" data-field="api" type="url" placeholder="https://script.google.com/macros/s/.../exec"><small>Endpoint do backend desta página. Preenchido/atualizado manualmente.</small></div>
+ <div class="field"><label for="fPlanilha">Planilha da página (Google Sheets)</label><input id="fPlanilha" data-field="planilha" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."><small>Link da planilha de dados usada por esta página.</small></div>
  <div class="two"><div class="field"><label for="fOrdem">Ordem (dentro do menu)</label><input id="fOrdem" data-field="ordem" type="number" value="0"></div><div class="field"><label>Status</label><label class="checkline"><input id="fAtivo" type="checkbox" data-field="ativo" checked> Página ativa</label></div></div>
  `,page);
 }
@@ -338,7 +340,7 @@ $("modalForm").addEventListener("submit",async e=>{
    if(editing)payload.id=editing.id;
    await call("salvarMenu",payload);toast("Menu salvo com sucesso.");
   }else if(modalType==="page"){
-   const payload={nome:$("fNome").value.trim(),arquivo:$("fArquivo").value.trim(),icone:$("fIcone").value.trim()||"📄",url:$("fUrl").value.trim(),ordem:Number($("fOrdem").value||0),menu:$("fMenu").value.trim()||"Menu principal",submenu:$("fSubmenu").value.trim(),descricao:$("fDescricao").value.trim(),ativo:$("fAtivo").checked};
+   const payload={nome:$("fNome").value.trim(),arquivo:$("fArquivo").value.trim(),icone:$("fIcone").value.trim()||"📄",url:$("fUrl").value.trim(),ordem:Number($("fOrdem").value||0),menu:$("fMenu").value.trim()||"Menu principal",submenu:$("fSubmenu").value.trim(),descricao:$("fDescricao").value.trim(),api:$("fApi").value.trim(),planilha:$("fPlanilha").value.trim(),ativo:$("fAtivo").checked};
    if(editing)payload.id=editing.id;
    await call("salvarPagina",payload);toast("Página salva com sucesso.");
   }

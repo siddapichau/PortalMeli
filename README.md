@@ -1,5 +1,9 @@
 # Portal de Controles Internos — versão atualizada
 
+> 🔧 Trabalho em andamento (ambiente de teste, API dinâmica por página e
+> permissões de ver/editar): ver [`continuidade/CONTINUIDADE.md`](continuidade/CONTINUIDADE.md)
+> para o estado atual, as regras da migração e a fila de arquivos pendentes.
+
 ## Arquivos usados em produção
 
 - `portal.html` — portal, menu hierárquico, favoritos por usuário e carregamento das páginas no iframe.
