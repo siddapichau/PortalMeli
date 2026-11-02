@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    * { text-rendering: geometricPrecision; -webkit-font-smoothing: antialiased; }
+    body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; background-color: #f3f4f6; font-family: 'Inter', sans-serif; overflow: hidden; display: flex !important; flex-direction: column; align-items: center; }
+    .card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    .table-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 250px; }
+    .table-scroll { flex: 1; overflow-y: auto; overflow-x: auto; width: 100%; display: block; }
+    table { width: 100%; min-width: 1300px; border-collapse: collapse; table-layout: fixed; }
+    thead th { position: sticky; top: 0; z-index: 10; background-color: #f8fafc; border-bottom: 2px solid #e5e7eb; }
+    td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row-hover { cursor: pointer; transition: background-color 0.2s; }
+    .row-hover:hover { background-color: #e8f0fe !important; }
+    body.exporting-mode, html.exporting-mode { overflow: visible !important; height: auto !important; }
+    body.exporting-mode #capture-zone { width: 1920px !important; height: 1080px !important; max-width: 1920px !important; max-height: 1080px !important; padding: 40px !important; background-color: #f3f4f6 !important; position: absolute !important; top: 0 !important; left: 0 !important; z-index: 9999 !important; display: flex !important; }
+    body.exporting-mode .control-panel, body.exporting-mode .btn-update { display: none !important; }
+    body.exporting-mode .table-scroll { overflow-y: hidden !important; max-height: 350px !important; }
+    body.exporting-mode .table-scroll::-webkit-scrollbar { display: none; }
+    
+    @keyframes driveGhostTruck { 0% { left: -10%; } 100% { left: 110%; } }
+    #ghost-truck-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; display: none; flex-direction: column; justify-content: center; align-items: center; }
+    .ghost-truck-container { position: absolute; animation: driveGhostTruck 4s linear infinite; opacity: 0.35; display: flex; flex-direction: column; align-items: center; }
+    .ghost-truck-icon { font-size: 100px; color: #2D3277; }
+    .ghost-truck-text { font-size: 24px; font-weight: 900; color: #2D3277; margin-top: 10px; text-transform: uppercase; letter-spacing: 2px;}
+  </style>
+</head>
+<body class="p-4 md:p-6 box-border">
+
+  <div id="ghost-truck-overlay">
+    <div class="ghost-truck-container">
+      <i class="fas fa-truck-moving ghost-truck-icon"></i>
+      <span class="ghost-truck-text">Carregando Dados...</span>
+    </div>
+  </div>
+
+  <div id="capture-zone" class="flex flex-col flex-1 w-full max-w-[1800px] gap-4">
+    <div class="bg-gradient-to-r from-[#2D3277] to-gray-800 text-white rounded-xl p-4 px-6 flex justify-between items-center shadow-sm border-b-4 border-[#FFD700] shrink-0">
+      <div class="flex items-center gap-4">
+        <span class="text-3xl drop-shadow">📦</span>
+        <div>
+          <h1 class="text-xl font-black uppercase tracking-wide">BPP 2026 SSC1 - RISCO DE LOST.</h1>
+          <p class="text-[#FFD700] font-bold text-xs">Pacotes Pendentes Inventário BPP 2026 (<span id="data-title">Aguardando Servidor...</span>)</p>
+        </div>
+      </div>
+      <button onclick="carregarDadosGerais(true)" class="btn-update bg-[#FFD700] text-gray-900 px-5 py-2 rounded-lg font-black text-xs hover:bg-yellow-400 transition shadow flex items-center gap-2">
+        <i class="fas fa-sync-alt"></i> Atualizar Dados
+      </button>
+    </div>
+
+    <div class="control-panel flex justify-between items-center bg-white p-3 px-6 rounded-xl shadow-sm border border-gray-200 shrink-0">
+      <div class="flex gap-6">
+        <div class="flex flex-col">
+          <label class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Base Operacional</label>
+          <select id="sel-aba" onchange="carregarDadosGerais()" class="border border-gray-300 p-1.5 rounded text-xs w-40 bg-gray-50 font-bold outline-none focus:border-[#2D3277]"><option value="">Carregando...</option></select>
+        </div>
+        <div class="flex flex-col">
+          <label class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Responsabilidade</label>
+          <select id="filter-resp" onchange="applyFilters(true)" class="border border-gray-300 p-1.5 rounded text-xs w-56 bg-gray-50 font-bold outline-none focus:border-[#2D3277]"><option value="ALL">Todas as Áreas</option></select>
+        </div>
+        <div class="flex flex-col">
+          <label class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Status (INV)</label>
+          <select id="filter-status" onchange="applyFilters(true)" class="border border-gray-300 p-1.5 rounded text-xs w-48 bg-gray-50 font-bold outline-none focus:border-[#2D3277]"><option value="ALL">Todos os Status</option></select>
+        </div>
+      </div>
+      <div class="flex gap-4">
+        <button onclick="gerarWPP()" class="bg-[#2ecc71] text-white font-black px-4 py-2 rounded hover:bg-[#27ae60] shadow-sm transition flex items-center gap-2 text-xs"><i class="fab fa-whatsapp text-sm"></i> Resumo WPP Geral</button>
+        <button onclick="exportarDashboard()" class="bg-[#2D3277] text-white font-black px-4 py-2 rounded hover:bg-blue-900 shadow-sm transition flex items-center gap-2 text-xs"><i class="fas fa-camera text-sm"></i> Exportar Dashboard</button>
+      </div>
+    </div>
+
+    <div id="metrics" class="grid grid-cols-4 gap-4 shrink-0">
+      <div class="card border-l-4 border-[#3b82f6] flex flex-col justify-center py-4 px-5">
+        <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Volume Exibido</h3>
+        <p id="val-vol" class="text-3xl font-black text-gray-800 mt-2">0</p>
+        <div><span class="text-[#3b82f6] text-[10px] font-bold bg-blue-50 px-2 py-0.5 rounded mt-2 inline-block">Pacotes impactados</span></div>
+      </div>
+      <div class="card border-l-4 border-[#10b981] flex flex-col justify-center py-4 px-5">
+        <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Risco Financeiro</h3>
+        <p id="val-risco" class="text-3xl font-black text-gray-800 mt-2">$ 0,00</p>
+        <div><span class="text-[#10b981] text-[10px] font-bold bg-green-50 px-2 py-0.5 rounded mt-2 inline-block">Soma de valores</span></div>
+      </div>
+      <div class="card border-l-4 border-[#f59e0b] flex flex-col justify-center py-4 px-5">
+        <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Aging Médio</h3>
+        <p id="val-aging" class="text-3xl font-black text-gray-800 mt-2">0 D</p>
+        <div><span class="text-[#d97706] text-[10px] font-bold bg-yellow-50 px-2 py-0.5 rounded mt-2 inline-block">Tempo de estagnação</span></div>
+      </div>
+      <div class="card border-l-4 border-[#ef4444] flex flex-col justify-center py-4 px-5">
+        <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Aging Crítico (Máx)</h3>
+        <p id="val-max" class="text-3xl font-black text-[#ef4444] mt-2">0 D</p>
+        <div><span class="text-[#ef4444] text-[10px] font-bold bg-red-50 px-2 py-0.5 rounded mt-2 inline-block">Maior ofensor temporal</span></div>
+      </div>
+    </div>
+
+    <div id="charts" class="grid grid-cols-2 gap-4 shrink-0">
+      <div class="card flex flex-col p-4">
+        <h3 class="text-[#2c3e50] font-black text-[12px] mb-3 uppercase text-center tracking-wide">Impacto $ x Responsabilidade</h3>
+        <div style="position: relative; height: 160px; width: 100%;"><canvas id="barChart"></canvas></div>
+      </div>
+      <div class="card flex flex-col p-4">
+        <h3 class="text-[#2c3e50] font-black text-[12px] mb-3 uppercase text-center tracking-wide">Faixas de Atraso (Buckets)</h3>
+        <div style="position: relative; height: 160px; width: 100%; display: flex; justify-content: center;"><canvas id="donutChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card p-0 border border-gray-200 overflow-hidden flex flex-col table-container">
+      <div class="bg-[#f8fafc] p-3 px-6 border-b border-gray-200 shrink-0">
+        <h3 class="text-[#2c3e50] font-black text-sm uppercase tracking-wider"><i class="fas fa-list-ul mr-2"></i> Track & Trace Operacional (Visão Resumida)</h3>
+      </div>
+      <div class="table-scroll p-0 m-0">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 15%; padding: 12px 12px 12px 24px; text-align: left; color: #6b7280; font-size: 11px; text-transform: uppercase;">ID do Pacote / Links</th>
+              <th style="width: 25%; padding: 12px; text-align: left; color: #6b7280; font-size: 11px; text-transform: uppercase;">Descrição do Produto</th>
+              <th style="width: 15%; padding: 12px; text-align: left; color: #6b7280; font-size: 11px; text-transform: uppercase;">Responsabilidade</th>
+              <th style="width: 10%; padding: 12px; text-align: left; color: #6b7280; font-size: 11px; text-transform: uppercase;">Status (INV)</th>
+              <th style="width: 10%; padding: 12px; text-align: left; color: #6b7280; font-size: 11px; text-transform: uppercase;">Sub Status</th>
+              <th style="width: 10%; padding: 12px; text-align: left; color: #6b7280; font-size: 11px; text-transform: uppercase;">Última Mov.</th>
+              <th style="width: 5%; padding: 12px; text-align: center; color: #6b7280; font-size: 11px; text-transform: uppercase;">Aging</th>
+              <th style="width: 10%; padding: 12px 24px 12px 12px; text-align: right; color: #6b7280; font-size: 11px; text-transform: uppercase;">Valor ($)</th>
+            </tr>
+          </thead>
+          <tbody id="table-body" style="background-color: #ffffff;">
+            <tr><td colspan="8" class="text-center p-8 text-gray-400 font-bold">Iniciando a malha logística...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
+
+    let rawData = [], filteredData = [], barChartInst, donutChartInst;
+    let dataCache = {};
+    let currentRequestId = 0;
+    const formatador = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const successSound = new Audio('https://www.myinstants.com/media/sounds/success-bell.mp3');
+    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timerProgressBar: true });
+
+    async function callAPI(action, payload = {}) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000); 
+      
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: action, ...payload }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) throw new Error("Erro HTTP " + response.status);
+        const data = await response.json();
+        if (data && data.erro) throw new Error(data.erro);
+        return data;
+      } catch (e) {
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') throw new Error('Timeout na requisição.');
+        throw e;
+      }
+    }
+
+    window.onload = async () => {
+      try { Chart.register(ChartDataLabels); } catch (e) {}
+      
+      const ghostTruck = document.getElementById('ghost-truck-overlay');
+      const tbody = document.getElementById('table-body');
+      
+      try {
+        ghostTruck.style.display = 'flex';
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center p-8 text-gray-500 font-bold text-lg"><i class="fas fa-satellite-dish mr-2 animate-pulse text-blue-500"></i> Conectando ao Banco de Dados...</td></tr>`;
+        
+        const r = await callAPI('getDashboardInit');
+        
+        let select = document.getElementById('sel-aba');
+        select.innerHTML = (r.abas || []).map(a => `<option value="${a}">${a}</option>`).join("");
+        select.value = r.abaAtiva || "";
+
+        // Exibe os avisos de colunas modificadas
+        if (r.avisos && r.avisos.length > 0) {
+           let alertHtml = '<ul style="text-align: left; font-size: 12px; margin-top: 10px;">' + r.avisos.map(a => `<li>⚠️ ${a}</li>`).join('') + '</ul>';
+           Swal.fire({ title: 'Avisos de Colunas', html: alertHtml, icon: 'warning', confirmButtonText: 'Entendi', confirmButtonColor: '#2D3277' });
+        }
+
+        if (r.colunasAusentes && r.colunasAusentes.length > 0) {
+           Toast.fire({ icon: 'error', title: `ERRO: Colunas ausentes: ${r.colunasAusentes.join(', ')}`, timer: 8000 });
+        }
+
+        // BLINDAGEM: Garante que dataArray nunca será undefined
+        const dadosParaCarregar = r.dadosDashboard || r.dadosCompletos || [];
+        await loadDataGradually(dadosParaCarregar, r.abaAtiva || "Base Atual");
+        ghostTruck.style.display = 'none';
+
+        let abasFaltantes = (r.abas || []).filter(a => a !== r.abaAtiva);
+        if (abasFaltantes.length > 0) {
+           callAPI('carregarBackground', { abasParaCarregar: abasFaltantes }).then(rBg => {
+              if(rBg && !rBg.erro) Object.assign(dataCache, rBg.cache);
+           }).catch(() => console.warn("Cache falhou."));
+        }
+        
+      } catch (err) {
+        ghostTruck.style.display = 'none';
+        document.getElementById('data-title').innerText = "Erro de Conexão";
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center p-10"><div class="bg-red-50 border-l-4 border-red-600 p-6 rounded shadow-sm max-w-2xl mx-auto"><h3 class="text-red-700 font-black text-2xl mb-2"><i class="fas fa-exclamation-triangle mr-2"></i> FALHA DE COMUNICAÇÃO</h3><p class="text-red-900 font-bold text-lg">${err.message}</p></div></td></tr>`;
+        Swal.fire('Erro', err.message, 'error');
+      }
+    };
+
+    function setupFilters(dados) {
+        dados = dados || []; // BLINDAGEM
+        let statusSet = new Set(), respSet = new Set();
+        dados.forEach(row => { 
+            if(row) {
+                if(row.statusInv) statusSet.add(row.statusInv); 
+                if(row.resp) respSet.add(row.resp); 
+            }
+        });
+        
+        const sSelect = document.getElementById('filter-status');
+        let currStatus = sSelect.value;
+        sSelect.innerHTML = '<option value="ALL">Todos os Status</option>';
+        Array.from(statusSet).sort().forEach(s => { if(s) sSelect.innerHTML += `<option value="${s}">${s}</option>`; });
+        if(statusSet.has(currStatus)) sSelect.value = currStatus; else sSelect.value = "ALL";
+
+        const rSelect = document.getElementById('filter-resp');
+        let currResp = rSelect.value;
+        rSelect.innerHTML = '<option value="ALL">Todas as Áreas</option>';
+        Array.from(respSet).sort().forEach(r => { if(r) rSelect.innerHTML += `<option value="${r}">${r}</option>`; });
+        if(respSet.has(currResp)) rSelect.value = currResp; else rSelect.value = "ALL";
+    }
+
+    function formataDolar(val) { return "$ " + val.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+    async function loadDataGradually(dataArray, tabName) {
+        dataArray = dataArray || []; // BLINDAGEM CRÍTICA
+        document.getElementById('data-title').innerText = tabName;
+        setupFilters(dataArray);
+        
+        rawData = [];
+        filteredData = [];
+        dataCache[tabName] = dataArray; 
+        
+        const tbody = document.getElementById('table-body');
+        const total = dataArray.length;
+        
+        if(total === 0) {
+            applyFilters(true);
+            return;
+        }
+        
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center p-8"><h3 class="text-lg font-black text-[#2D3277] uppercase"><i class="fas fa-box-open mr-2 text-[#FFD700]"></i>Descarregando <span id="load-count" class="text-[#FFD700]">0</span> de ${total} pacotes...</h3><div class="w-full bg-gray-200 rounded-full h-3 mt-4 max-w-md mx-auto overflow-hidden"><div class="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-100 ease-out" id="load-bar" style="width: 0%"></div></div></td></tr>`;
+        
+        const chunkSize = 500; 
+        let currentIndex = 0;
+        
+        return new Promise((resolve) => {
+            function renderNextChunk() {
+                const chunk = dataArray.slice(currentIndex, currentIndex + chunkSize);
+                rawData.push(...chunk);
+                currentIndex += chunk.length;
+                
+                const fStatus = document.getElementById('filter-status').value; 
+                const fResp = document.getElementById('filter-resp').value;
+                filteredData = rawData.filter(r => r && (fStatus === "ALL" || r.statusInv === fStatus) && (fResp === "ALL" || r.resp === fResp));
+                
+                let volume = filteredData.length, riscoTotal = 0, somaAging = 0, maxAging = 0;
+                filteredData.forEach(r => { riscoTotal += (r.valorNum || 0); somaAging += (r.aging || 0); if (r.aging > maxAging) maxAging = r.aging; });
+                
+                document.getElementById('val-vol').innerText = volume; 
+                document.getElementById('val-risco').innerText = formataDolar(riscoTotal); 
+                document.getElementById('val-aging').innerText = volume > 0 ? Math.round(somaAging / volume) + ' D' : '0 D'; 
+                document.getElementById('val-max').innerText = maxAging + ' D';
+                
+                const pct = Math.round((currentIndex / total) * 100);
+                const loadCount = document.getElementById('load-count');
+                const loadBar = document.getElementById('load-bar');
+                if(loadCount) loadCount.innerText = currentIndex;
+                if(loadBar) loadBar.style.width = pct + '%';
+                
+                if (currentIndex < total) {
+                    setTimeout(renderNextChunk, 0); 
+                } else {
+                    successSound.play();
+                    renderizarPainel();
+                    Toast.fire({ icon: 'success', title: `✅ ${tabName} Carregada 100%!`, timer: 2000 });
+                    resolve();
+                }
+            }
+            renderNextChunk();
+        });
+    }
+
+    async function carregarDadosGerais(forceRefresh = false) {
+      const abaSelec = document.getElementById('sel-aba').value;
+      const ghostTruck = document.getElementById('ghost-truck-overlay');
+      const myRequestId = ++currentRequestId;
+
+      if(!forceRefresh && dataCache[abaSelec]) {
+         ghostTruck.style.display = 'none';
+         document.getElementById('data-title').innerText = abaSelec;
+         setupFilters(dataCache[abaSelec]);
+         rawData = [...dataCache[abaSelec]];
+         applyFilters(true);
+         return;
+      }
+
+      ghostTruck.style.display = 'flex';
+      document.getElementById('table-body').innerHTML = `<tr><td colspan="8" class="text-center p-8"><h3 class="text-lg font-black text-[#2D3277]"><i class="fas fa-search mr-2"></i>Puxando histórico de ${abaSelec}...</h3></td></tr>`;
+      
+      try {
+        const r = await callAPI('obterDadosLogisticos', { nomeAba: abaSelec });
+        if (myRequestId !== currentRequestId) return;
+        if (r.erro) throw new Error(r.erro);
+        
+        if (r.avisos && r.avisos.length > 0) {
+           let alertHtml = '<ul style="text-align: left; font-size: 12px; margin-top: 10px;">' + r.avisos.map(a => `<li>⚠️ ${a}</li>`).join('') + '</ul>';
+           Swal.fire({ title: 'Avisos de Colunas', html: alertHtml, icon: 'warning', confirmButtonText: 'Entendi', confirmButtonColor: '#2D3277' });
+        }
+        
+        if (r.colunasAusentes && r.colunasAusentes.length > 0) {
+           Toast.fire({ icon: 'error', title: `ERRO: Colunas ausentes: ${r.colunasAusentes.join(', ')}`, timer: 8000 });
+        }
+
+        // BLINDAGEM: Garante que dataArray nunca será undefined
+        const dadosParaCarregar = r.dadosDashboard || r.dadosCompletos || [];
+        await loadDataGradually(dadosParaCarregar, abaSelec);
+        if (myRequestId !== currentRequestId) return;
+        ghostTruck.style.display = 'none';
+      } catch(e) {
+        if (myRequestId !== currentRequestId) return;
+        ghostTruck.style.display = 'none';
+        Swal.fire('Erro', e.message, 'error');
+      }
+    }
+
+    function applyFilters(renderTable = true) {
+      const fStatus = document.getElementById('filter-status').value; 
+      const fResp = document.getElementById('filter-resp').value;
+      filteredData = rawData.filter(r => r && (fStatus === "ALL" || r.statusInv === fStatus) && (fResp === "ALL" || r.resp === fResp));
+      if(renderTable) renderizarPainel();
+    }
+
+    function abrirDetalhes(id) {
+      const item = filteredData.find(i => i.id === id); if(!item) return;
+      Swal.fire({
+        title: `<div class="text-2xl font-black text-[#2D3277] mb-2"><i class="fas fa-search-location mr-2"></i> Detalhes do Pacote</div>`,
+        html: `<div class="text-left text-sm space-y-4 bg-gray-50 p-5 rounded-lg border border-gray-200"><p class="border-b pb-2"><strong class="text-gray-500 uppercase text-xs">ID do Pacote:</strong> <br><span class="font-bold text-lg text-gray-900">${item.id || '-'}</span></p><p class="border-b pb-2"><strong class="text-gray-500 uppercase text-xs">Descrição:</strong> <br><span class="font-bold text-gray-800">${item.desc || '-'}</span></p><div class="grid grid-cols-2 gap-4 border-b pb-2"><p><strong class="text-gray-500 uppercase text-xs">Responsabilidade:</strong> <br><span class="font-bold text-blue-600">${item.resp || '-'}</span></p><p><strong class="text-gray-500 uppercase text-xs">Status (INV):</strong> <br><span class="font-bold text-gray-800">${item.statusInv || '-'}</span></p></div><div class="grid grid-cols-2 gap-4 border-b pb-2"><p><strong class="text-gray-500 uppercase text-xs">Sub Status:</strong> <br><span class="font-bold text-gray-800">${item.subStatus || '-'}</span></p><p><strong class="text-gray-500 uppercase text-xs">Última Movimentação:</strong> <br><span class="font-bold text-gray-800">${item.ultMov || '-'}</span></p></div><div class="grid grid-cols-2 gap-4"><p><strong class="text-gray-500 uppercase text-xs">Aging (Dias):</strong> <br><span class="font-black text-red-600 text-lg">${item.aging || 0} D</span></p><p><strong class="text-gray-500 uppercase text-xs">Valor ($):</strong> <br><span class="font-black text-green-600 text-lg">${formataDolar(item.valorNum || 0)}</span></p></div></div>`,
+        width: 600, confirmButtonText: 'Fechar', confirmButtonColor: '#2D3277'
+      });
+    }
+
+    function renderizarPainel() {
+      try { Chart.register(ChartDataLabels); } catch (e) {}
+      let volume = filteredData.length, riscoTotal = 0, somaAging = 0, maxAging = 0;
+      let respMap = {}; let a0_2 = 0, a3_6 = 0, a7_10 = 0, a11 = 0; let tableHtml = "";
+      let sortedData = [...filteredData].sort((a, b) => (b.valorNum || 0) - (a.valorNum || 0));
+
+      sortedData.forEach(r => {
+        riscoTotal += (r.valorNum || 0); somaAging += (r.aging || 0); if ((r.aging || 0) > maxAging) maxAging = r.aging;
+        let respLimpo = r.resp ? String(r.resp).toUpperCase().trim() : "";
+        if(respLimpo && respLimpo !== "UNDEFINED" && respLimpo !== "NULL" && respLimpo !== "-" && respLimpo !== " ") { respMap[respLimpo] = (respMap[respLimpo] || 0) + (r.valorNum || 0); }
+        if(r.aging <= 2) a0_2++; else if(r.aging <= 6) a3_6++; else if(r.aging <= 10) a7_10++; else a11++;
+        let badgeAging = r.aging <= 2 ? 'background-color: #d1fae5; color: #065f46;' : r.aging <= 6 ? 'background-color: #fef3c7; color: #92400e;' : 'background-color: #fee2e2; color: #b91c1c;';
+        let descSegura = String(r.desc || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        
+        tableHtml += `<tr style="border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#e8f0fe'" onmouseout="this.style.backgroundColor='transparent'" onclick="abrirDetalhes('${r.id}')">`;
+        tableHtml += `<td style="padding: 12px 12px 12px 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><div style="display: flex; gap: 6px; align-items: center;"><span style="display: inline-block; background-color: #e5e7eb; border: 1px solid #d1d5db; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; color: #374151; font-size: 11px;">${r.id || '-'}</span><a href="https://envios.adminml.com/logistics/package-management/package/${r.id}" target="_blank" onclick="event.stopPropagation()" style="display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 24px; height: 24px; background-color: #dbeafe; border: 1px solid #bfdbfe; color: #2563eb; border-radius: 4px; text-decoration: none;"><i class="fas fa-box-open"></i></a><a href="https://shipping-bo.adminml.com/sauron/shipments/shipment/${r.id}" target="_blank" onclick="event.stopPropagation()" style="display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 24px; height: 24px; background-color: #f3e8ff; border: 1px solid #e9d5ff; color: #9333ea; border-radius: 4px; text-decoration: none;"><i class="fas fa-truck"></i></a></div></td>`;
+        tableHtml += `<td style="padding: 12px; font-size: 11px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${descSegura}">${descSegura}</td>`;
+        tableHtml += `<td style="padding: 12px; font-size: 10px; font-weight: bold; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.resp || '-'}</td>`;
+        tableHtml += `<td style="padding: 12px; font-size: 10px; color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.statusInv || '-'}</td>`;
+        tableHtml += `<td style="padding: 12px; font-size: 10px; color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.subStatus || '-'}</td>`;
+        tableHtml += `<td style="padding: 12px; font-size: 10px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.ultMov || '-'}</td>`;
+        tableHtml += `<td style="padding: 12px; text-align: center;"><span style="${badgeAging} border: 1px solid transparent; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; display: inline-block;">${r.aging || 0} D</span></td>`;
+        tableHtml += `<td style="padding: 12px 24px 12px 12px; text-align: right; font-weight: 900; color: #111827; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${formataDolar(r.valorNum || 0)}</td></tr>`;
+      });
+      
+      if (volume === 0) tableHtml = `<tr><td colspan="8" class="text-center p-8 text-gray-500 font-bold">Nenhum dado encontrado para os filtros atuais.</td></tr>`;
+      
+      document.getElementById('table-body').innerHTML = tableHtml;
+      document.getElementById('val-vol').innerText = volume; 
+      document.getElementById('val-risco').innerText = formataDolar(riscoTotal); 
+      document.getElementById('val-aging').innerText = volume > 0 ? Math.round(somaAging / volume) + ' D' : '0 D'; 
+      document.getElementById('val-max').innerText = maxAging + ' D';
+      
+      delete respMap["UNDEFINED"]; delete respMap["undefined"];
+      let labelsResp = Object.keys(respMap).sort((a,b) => respMap[b] - respMap[a]).slice(0, 4); 
+      let dataResp = labelsResp.map(k => respMap[k]);
+      
+      try {
+        if (barChartInst) barChartInst.destroy(); 
+        if (donutChartInst) donutChartInst.destroy();
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        barChartInst = new Chart(document.getElementById('barChart').getContext('2d'), { type: 'bar', data: { labels: labelsResp, datasets: [{ data: dataResp, backgroundColor: '#3b82f6', borderRadius: 4 }] }, options: { devicePixelRatio: 4, maintainAspectRatio: false, indexAxis: 'y', layout: { padding: { right: 80 } }, plugins: { legend: { display: false }, datalabels: { color: '#333333', anchor: 'end', align: 'right', offset: 4, font: { weight: '900', size: 11 }, formatter: (val) => formataDolar(val) } }, scales: { x: { display: true, grid: { color: '#e5e7eb', drawBorder: false }, ticks: { font: { weight: 'bold', size: 10 }, color: '#9ca3af', callback: function(value) { return value === 0 ? '$ 0' : '$ ' + (value/1000) + 'k'; } } }, y: { grid: { display: false }, ticks: { font: { weight: 'bold', size: 10 }, color: '#4b5563' } } } } });
+        donutChartInst = new Chart(document.getElementById('donutChart').getContext('2d'), { type: 'doughnut', data: { labels: ['0-2 Dias', '3-6 Dias', '7-10 Dias', '11+ Dias'], datasets: [{ data: [a0_2, a3_6, a7_10, a11], backgroundColor: ['#10b981', '#f59e0b', '#f97316', '#ef4444'], borderWidth: 2 }] }, options: { devicePixelRatio: 4, maintainAspectRatio: false, cutout: '65%', layout: { padding: 10 }, plugins: { legend: { position: 'right', labels: { font: { weight: 'bold', size: 11 }, boxWidth: 12, color: '#4b5563', padding: 15 } }, datalabels: { color: '#ffffff', backgroundColor: '#1f2937', borderRadius: 4, padding: 4, font: { weight: 'bold', size: 11 }, formatter: (val, ctx) => { let sum = ctx.chart._metasets[0].total; return sum > 0 && val > 0 ? (val * 100 / sum).toFixed(1) + '%' : ''; } } } } });
+      } catch (chartErr) { }
+    }
+
+    function gerarWPP() {
+      if (filteredData.length === 0 && rawData.length === 0) return Swal.fire('Aviso', 'Não há dados para gerar.', 'warning');
+      let d1Data = rawData.filter(r => (r.aging || 0) === 1); let volD1 = d1Data.length, riscoD1 = 0, maxAgingD1 = 0; let scValD1 = 0, lmValD1 = 0, tiValD1 = 0;
+      d1Data.forEach(r => { riscoD1 += (r.valorNum || 0); if ((r.aging || 0) > maxAgingD1) maxAgingD1 = r.aging; let respUp = (r.resp || '').toUpperCase(); if (respUp.includes("SERVICE")) scValD1 += (r.valorNum || 0); if (respUp.includes("LAST")) lmValD1 += (r.valorNum || 0); if (respUp.includes("TRATATIVA")) tiValD1 += (r.valorNum || 0); });
+      let vol = filteredData.length, risco = 0, somaAging = 0, maxAging = 0; let a0_2 = 0, a3_6 = 0, a7_10 = 0, a11 = 0; let scVal = 0, lmVal = 0, tiVal = 0;
+      filteredData.forEach(r => { risco += (r.valorNum || 0); somaAging += (r.aging || 0); if ((r.aging || 0) > maxAging) maxAging = r.aging; if((r.aging || 0) <= 2) a0_2++; else if((r.aging || 0) <= 6) a3_6++; else if((r.aging || 0) <= 10) a7_10++; else a11++; let respUp = (r.resp || '').toUpperCase(); if (respUp.includes("SERVICE")) scVal += (r.valorNum || 0); if (respUp.includes("LAST")) lmVal += (r.valorNum || 0); if (respUp.includes("TRATATIVA")) tiVal += (r.valorNum || 0); });
+      let p0 = vol > 0 ? ((a0_2/vol)*100).toFixed(1) : 0; let p3 = vol > 0 ? ((a3_6/vol)*100).toFixed(1) : 0; let p7 = vol > 0 ? ((a7_10/vol)*100).toFixed(1) : 0; let p11 = vol > 0 ? ((a11/vol)*100).toFixed(1) : 0; let medAging = vol > 0 ? Math.round(somaAging / vol) : 0;
+      let abaHj = document.getElementById('sel-aba').value || 'Base Atual'; let top5 = [...filteredData].sort((a,b) => (b.valorNum || 0) - (a.valorNum || 0)).slice(0, 5);
+      
+      let msg = `RISCO DE LOST | (${abaHj})\nPacotes Pendentes Inventario\n\n🗓️ Risco D-1\n\nID shipments: ${volD1}\nValores: ${formataDolar(riscoD1)}\nAging Crítico: ${maxAgingD1} Dias\n\nRisco por area\n\nService Center: ${formataDolar(scValD1)}\nLast Mile: ${formataDolar(lmValD1)}\nInventario: ${formataDolar(tiValD1)}\n\n⚠️ Risco acumulado\n\nID Shipments: ${vol}\nRisco: ${formataDolar(risco)}\n\nDetalhamento de Status:\nID Shipments pendentes: ${vol}\nMédia aging: ${medAging} dias\n\nRisco por area\n\nService Center: ${formataDolar(scVal)}\nLast Mile: ${formataDolar(lmVal)}\nInventario: ${formataDolar(tiVal)}\n\n🚨 Media de Aging's\n\n0-2 Dias: ${p0}%\n3-6 Dias: ${p3}%\n7-10 Dias: ${p7}%\n11+ Dias: ${p11}%\n\nI 📦 5 IDs Shipments de maior Valor I\n\nQue já estão em tratativas.\n\n`;
+      
+      top5.forEach((item, i) => { let d = item.desc ? item.desc.substring(0, 45) + '...' : 'Produto s/ nome'; msg += `${i+1}° ${d} Valor: ${formataDolar(item.valorNum || 0)}\nAging de entrada: ${item.aging || 0}\n`; });
+      Swal.fire({ title: '📱 Resumo WPP Gerado', html: `<textarea readonly class="w-full h-64 p-3 border rounded text-xs font-mono bg-gray-50">${msg}</textarea>`, showCancelButton: true, confirmButtonText: '📋 Copiar Texto', cancelButtonText: 'Fechar', confirmButtonColor: '#2ecc71' }).then((result) => { if (result.isConfirmed) { navigator.clipboard.writeText(msg); Swal.fire('Copiado!', 'Relatório pronto.', 'success'); } });
+    }
+
+    function exportarDashboard() {
+      Toast.fire({ icon: 'info', title: 'Processando Câmera HD...', timer: 10000 });
+      const zone = document.getElementById('capture-zone'); document.body.classList.add('exporting-mode'); document.documentElement.classList.add('exporting-mode');
+      setTimeout(() => {
+        html2canvas(zone, { scale: 2, width: 1920, height: 1080, windowWidth: 1920, windowHeight: 1080, backgroundColor: '#f3f4f6', useCORS: true, logging: false }).then(canvas => {
+          let link = document.createElement('a'); link.download = `Dashboard_BPP2026_${document.getElementById('sel-aba').value.replace('/','-')}.png`; link.href = canvas.toDataURL('image/png', 1.0); link.click();
+          document.body.classList.remove('exporting-mode'); document.documentElement.classList.remove('exporting-mode');
+        }).catch(err => { document.body.classList.remove('exporting-mode'); document.documentElement.classList.remove('exporting-mode'); Swal.fire('Erro', 'Falha na captura.', 'error'); });
+      }, 1000); 
+    }
+  </script>
+</body>
+</html>

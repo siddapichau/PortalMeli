@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Poka Yoke — Dashboard</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    :root { --azul:#2D3277; --amarelo:#FFD700; --fundo:#f4f6f9; }
+    body { background-color: var(--fundo); font-family: system-ui, -apple-system, sans-serif; }
+    .screen { display:none; }
+    .screen.active { display:block; }
+
+    #loader-overlay {
+      position:fixed; inset:0; background:rgba(255,255,255,.9);
+      display:none; flex-direction:column; align-items:center; justify-content:center; z-index:9999;
+    }
+    #loader-overlay.show { display:flex; }
+    .spinner { width:48px; height:48px; border:5px solid #e5e7eb; border-top-color:var(--azul); border-radius:50%; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .card-menu { background:#fff; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+      cursor:pointer; transition:transform .2s; border:1px solid #e5e7eb; display:flex; flex-direction:column; justify-content:center; }
+    .card-menu:hover { transform:translateY(-4px); box-shadow:0 8px 20px rgba(0,0,0,.1); border-color:#2D3277; }
+
+    /* Ajuste no tamanho dos KPIs para ficar mais compacto */
+    .kpi-card { background:#fff; border-radius:8px; padding:10px 12px; box-shadow:0 1px 3px rgba(0,0,0,.1); border-left:4px solid var(--amarelo); }
+    .kpi-title { font-size:11px; color:#666; text-transform:uppercase; font-weight:bold; margin-bottom:4px; }
+    .kpi-value { font-size:22px; font-weight:900; color:#111; line-height:1; }
+    
+    .table-container { max-height:450px; overflow-y:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { padding:8px 12px; text-align:center; border-bottom:1px solid #eee; }
+    th { background:#f8f9fa; position:sticky; top:0; color:#555; z-index:2; font-weight:bold; text-transform:uppercase; }
+    td { color: #333; }
+    tr:hover td { background-color: #fafafa; }
+    
+    .bg-yellow-header { background-color: #FFF159; color: #333; }
+
+    /* Modo de Exportação de Imagem */
+    body.exporting-mode #capture-area {
+      position:absolute !important; top:0; left:0;
+      width:1200px !important; height:auto !important; padding:20px !important;
+      background:#f4f6f9 !important; z-index:99999;
+    }
+    body.exporting-mode .no-export { display:none !important; }
+    
+    /* Corta a tabela de relação total no 10º item ao exportar */
+    body.exporting-mode #table-relacao tbody tr:nth-child(n+11) { display: none !important; }
+    body.exporting-mode .table-container { max-height: none !important; overflow: visible !important; }
+  </style>
+</head>
+<body class="p-4 min-w-[900px]">
+
+<div id="loader-overlay" class="no-export">
+  <div class="spinner"></div>
+  <p class="mt-4 font-bold text-[#2D3277]">Processando…</p>
+</div>
+
+<!-- TOPBAR -->
+<header class="bg-white rounded-lg shadow p-3 flex justify-between items-center mb-6 border-t-4 border-[#FFD700] no-export">
+  <div class="flex items-center gap-3">
+    <button onclick="abrirTela('screen-menu')" class="text-[#2D3277] font-bold text-lg hover:opacity-80">
+      <i class="fa-solid fa-house mr-1"></i> Início
+    </button>
+    <span class="text-gray-300">|</span>
+    <a href="https://docs.google.com/spreadsheets/d/1YGfXDmN6R6CnN34YkpfA80zXQ9jM-7L3DOUWz44D1Hs/edit" target="_blank" class="text-sm text-blue-700 hover:underline">
+      <i class="fa-solid fa-table"></i> Planilha
+    </a>
+    <button onclick="location.reload()" class="text-sm text-blue-700 hover:underline">
+      <i class="fa-solid fa-rotate-right"></i> Atualizar
+    </button>
+  </div>
+  <div class="flex items-center gap-2">
+    <button onclick="baixarImagem()" class="bg-[#2D3277] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+      <i class="fa-solid fa-camera"></i> Exportar Imagem
+    </button>
+  </div>
+</header>
+
+<!-- MENU -->
+<div id="screen-menu" class="screen active no-export">
+  <h2 class="text-2xl font-bold text-[#2D3277] mb-6">Qual período deseja analisar?</h2>
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-7xl">
+
+    <div class="card-menu text-center border-t-4 border-[#2D3277]" onclick="abrirDashboard('daily')">
+      <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-calendar-day"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Diário</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha o <b>dia</b>. Evolução: últimas <b>4 semanas</b> até esse dia.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#FFD700]" onclick="abrirDashboard('weekly')">
+      <div class="text-4xl text-[#FFD700] mb-3"><i class="fa-solid fa-calendar-week"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Semanal</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha a <b>semana (xxw)</b>. Evolução: últimas <b>4 semanas</b> até ela.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#34a853]" onclick="abrirDashboard('monthly')">
+      <div class="text-4xl text-[#34a853] mb-3"><i class="fa-solid fa-calendar-days"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Mensal</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha o <b>mês</b>. Evolução: últimos <b>3 meses</b> até ele.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#ea4335]" onclick="abrirTela('screen-upload')">
+      <div class="text-4xl text-[#ea4335] mb-3"><i class="fa-solid fa-upload"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">1° Subir Arquivos</h3>
+      <p class="text-sm text-gray-500 mt-2">Selecione os 3 CSVs de uma vez (AM, PM, SD).</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- UPLOAD -->
+<div id="screen-upload" class="screen">
+  <div class="bg-white rounded-lg shadow p-6 max-w-2xl mx-auto border-t-4 border-[#ea4335]">
+    <h2 class="text-2xl font-bold text-[#2D3277] mb-4"><i class="fa-solid fa-upload mr-2"></i>Subir Arquivos CSV</h2>
+    <p class="text-sm text-gray-600 mb-4">Selecione os <b>três arquivos de uma vez</b>. O sistema identificará qual é AM, PM ou SD pelo nome do arquivo.</p>
+
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition cursor-pointer" onclick="document.getElementById('file-multi').click()">
+      <i class="fa-solid fa-cloud-arrow-up text-4xl text-gray-400 mb-2"></i>
+      <p class="text-gray-600 font-bold mb-1">Clique aqui para selecionar</p>
+      <p class="text-xs text-gray-400">Arquivos aceitos: .csv ou .txt</p>
+      <input type="file" id="file-multi" accept=".csv, .txt" multiple class="hidden" onchange="mostrarArquivosSelecionados()">
+    </div>
+
+    <div id="lista-arquivos" class="mt-4 text-sm text-gray-700 space-y-1"></div>
+
+    <button onclick="enviarArquivos()" class="mt-6 w-full bg-[#ea4335] text-white font-bold py-3 rounded hover:opacity-90 transition">
+      <i class="fa-solid fa-cloud-arrow-up mr-2"></i> Enviar Todos os Arquivos
+    </button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="screen-dashboard" class="screen">
+  <div id="capture-area">
+
+    <div class="bg-white rounded-lg shadow p-4 mb-4 text-center border-t-4 border-[#FFD700]">
+      <h2 class="text-2xl font-black text-[#2D3277] uppercase tracking-wider" id="dashboard-title">POKA YOKE — DASHBOARD</h2>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="bg-white rounded-lg shadow p-3 mb-4 flex flex-wrap items-center gap-3 no-export">
+      <span class="text-xs font-black text-gray-500 uppercase tracking-wider mr-1">Filtros:</span>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600" id="filter-periodo-label">Data:</span>
+        <select id="filter-periodo" onchange="aplicarFiltrosDashboard()" class="border rounded px-3 py-1.5 text-sm font-bold text-gray-700"></select>
+      </label>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600">Ciclo:</span>
+        <select id="filter-ciclo" onchange="aplicarFiltrosDashboard()" class="border rounded px-3 py-1.5 text-sm font-bold text-gray-700">
+          <option value="TODOS">Todos</option>
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+          <option value="SD">SD</option>
+        </select>
+      </label>
+
+      <button onclick="resetarFiltros()" class="ml-auto bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded">
+        <i class="fa-solid fa-eraser mr-1"></i> Limpar
+      </button>
+    </div>
+
+    <!-- KPIs GERAIS -->
+    <div class="grid grid-cols-4 gap-2 mb-3">
+      <div class="kpi-card text-center" style="border-left-color:#2D3277;">
+        <div class="kpi-title">Bipes</div>
+        <div class="kpi-value" id="kpi-bipes">0</div>
+      </div>
+      <div class="kpi-card text-center" style="border-left-color:#ea4335;">
+        <div class="kpi-title">Erros</div>
+        <div class="kpi-value text-red-600" id="kpi-erros">0</div>
+        <div class="text-xs font-bold text-red-500 mt-1" id="kpi-erros-pct">0.00%</div>
+      </div>
+      <div class="kpi-card text-center" style="border-left-color:#34a853;">
+        <div class="kpi-title">Assertividade</div>
+        <div class="kpi-value text-green-600" id="kpi-assert">0.00%</div>
+      </div>
+      <div class="kpi-card text-center" style="border-left-color:#FFD700;">
+        <div class="kpi-title">Total Ofensores</div>
+        <div class="kpi-value" id="kpi-ofensores">0</div>
+      </div>
+    </div>
+
+    <!-- KPIs CICLOS -->
+    <div class="grid grid-cols-3 gap-2 mb-4">
+      <div class="bg-white rounded-lg shadow p-3 flex justify-around items-center">
+        <div class="text-center">
+          <h3 class="text-xs text-gray-500 font-bold uppercase mb-1">Ciclo AM</h3>
+          <p class="text-xl font-black text-blue-600" id="kpi-am-bipes">0</p>
+          <p class="text-xs text-red-500 font-bold" id="kpi-am-erros">0 Erros</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-3 flex justify-around items-center">
+        <div class="text-center">
+          <h3 class="text-xs text-gray-500 font-bold uppercase mb-1">Ciclo PM</h3>
+          <p class="text-xl font-black text-blue-600" id="kpi-pm-bipes">0</p>
+          <p class="text-xs text-red-500 font-bold" id="kpi-pm-erros">0 Erros</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-3 flex justify-around items-center">
+        <div class="text-center">
+          <h3 class="text-xs text-gray-500 font-bold uppercase mb-1">Ciclo SD</h3>
+          <p class="text-xl font-black text-blue-600" id="kpi-sd-bipes">0</p>
+          <p class="text-xs text-red-500 font-bold" id="kpi-sd-erros">0 Erros</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABELAS INTERMEDIÁRIAS -->
+    <div class="grid grid-cols-12 gap-4 mb-4">
+      <!-- Top Ofensores -->
+      <div class="col-span-4 bg-white rounded-lg shadow flex flex-col">
+        <div class="bg-yellow-header p-2 text-center border-b border-gray-300 rounded-t-lg">
+          <h3 class="text-[13px] font-bold text-gray-800">⚠️ TOP 5 OFENSORES</h3>
+        </div>
+        <div class="table-container" style="max-height:280px;">
+          <table id="table-ofensores">
+            <thead><tr><th class="text-left">Nome</th><th>Bipes</th><th>Erros ▾</th><th>Taxa</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Detalhamento de Erros -->
+      <div class="col-span-3 bg-white rounded-lg shadow flex flex-col">
+        <div class="bg-yellow-header p-2 text-center border-b border-gray-300 rounded-t-lg">
+          <h3 class="text-[13px] font-bold text-gray-800">❗️ DETALHAMENTO DE ERROS</h3>
+        </div>
+        <div class="p-2">
+          <table class="w-full text-sm">
+            <tbody id="table-resumo-erros">
+              <tr><td class="text-left font-bold text-gray-700 bg-gray-50 border">Gaiola Errada</td><td class="font-bold border text-center" id="tot-gaiola">0</td></tr>
+              <tr><td class="text-left font-bold text-gray-700 bg-gray-50 border">Falha Poka Yoke</td><td class="font-bold border text-center" id="tot-falha">0</td></tr>
+              <tr><td class="text-left font-bold text-gray-700 bg-gray-50 border">Força Saída</td><td class="font-bold border text-center" id="tot-forca">0</td></tr>
+              <tr><td class="text-left font-bold text-gray-700 bg-gray-50 border">Problema QR</td><td class="font-bold border text-center" id="tot-prob">0</td></tr>
+              <tr><td class="text-left font-bold text-gray-700 bg-gray-50 border">QR Sem Poka</td><td class="font-bold border text-center" id="tot-qrsem">0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Gráfico Evolução -->
+      <div class="col-span-5 bg-white rounded-lg shadow p-4">
+        <h4 class="font-bold text-[13px] mb-2 uppercase text-gray-700" id="chart-evolucao-title">Evolução</h4>
+        <div id="chart-evolucao"></div>
+      </div>
+    </div>
+
+    <!-- RELAÇÃO TOTAL -->
+    <div class="bg-white rounded-lg shadow flex flex-col">
+      <div class="bg-yellow-header p-2 border-b border-gray-300 flex justify-between px-4 items-center rounded-t-lg">
+        <h3 class="text-[13px] font-bold text-gray-800">≡ RELAÇÃO TOTAL</h3>
+      </div>
+      <div class="table-container" style="max-height:600px;">
+        <table id="table-relacao">
+          <thead>
+            <tr>
+              <th class="text-left">Nome</th>
+              <th>Bipes ▾</th>
+              <th>Erros</th>
+              <th>Gaiola_Errada</th>
+              <th>Forçou_Saída</th>
+              <th>Falha_Poka</th>
+              <th>Problema_QR</th>
+              <th>QR_Sem_Poka</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbzE03748pdQ7wrO5MTSqQ0iUkiqM-DJ88hqsVgMobPM0fJwrfzUXG5Fpay3uA-Lv0mA/exec";
+
+let globalData = [];
+let datasetFiltradoDashboard = [];
+let currentMode = 'daily';
+let selectedPeriod = '';
+let selectedPeriodLabel = '';
+let colMap = {};
+let chartEvolucao = null;
+
+function abrirTela(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function fmtNum(v) { return Number(v).toLocaleString('pt-BR'); }
+function esc(v) { return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+function parseDataBR(s) {
+  if (!s) return null;
+  if (String(s).includes('-') && String(s).length > 7) {
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const p = String(s).trim().split('/');
+  if (p.length !== 3) return null;
+  const d = new Date(+p[2], +p[1]-1, +p[0]);
+  return isNaN(d.getTime()) ? null : d;
+}
+function formatDateBR(d) {
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+function getISOYearWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const isoYear = d.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return { isoYear, week };
+}
+function getISOWeeksInYear(year) {
+  const d = new Date(Date.UTC(year, 11, 28));
+  return getISOYearWeek(d).week;
+}
+function weekKey(date) {
+  const { isoYear, week } = getISOYearWeek(date);
+  return `${isoYear}-W${String(week).padStart(2,'0')}`;
+}
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+}
+
+async function callAPI(action, payload = {}) {
+  const loader = document.getElementById('loader-overlay');
+  loader.classList.add('show');
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, payload })
+    });
+    const data = await res.json();
+    if (data && data.erro) throw new Error(data.erro);
+    return data;
+  } catch (err) {
+    Swal.fire({ icon:'error', title:'Erro', text: err.message, confirmButtonColor:'#2D3277' });
+    throw err;
+  } finally {
+    loader.classList.remove('show');
+  }
+}
+
+function detectarColunas() {
+  if (!globalData.length) return;
+  const cols = Object.keys(globalData[0]);
+  const find = pat => cols.find(c => pat.test(c.toLowerCase().trim())) || null;
+  colMap = {
+    data: find(/data|date/),
+    ciclo: find(/ciclo/),
+    nome: find(/nome|user/),
+    bipes: find(/bipes|total/),
+    erros: find(/erros|tot/),
+    gaiola: find(/gaiola/),
+    forca: find(/forca|força|forçou/),
+    falha: find(/falha/),
+    probqr: find(/problema.*qr/),
+    qrsem: find(/qr.*sem/)
+  };
+}
+
+async function garantirDados() {
+  if (globalData.length > 0) return;
+  const resp = await callAPI('getHistorico');
+  globalData = resp.rows || [];
+  detectarColunas();
+}
+
+async function abrirDashboard(mode) {
+  currentMode = mode;
+  abrirTela('screen-dashboard');
+
+  try { await garantirDados(); }
+  catch(e) {
+    document.querySelector('#table-relacao tbody').innerHTML =
+      `<tr><td colspan="8" style="text-align:center;color:#b91c1c;font-weight:700;padding:20px">${esc(e.message)}</td></tr>`;
+    return;
+  }
+
+  popularFiltroPeriodo(mode);
+  aplicarFiltrosDashboard();
+}
+
+function popularFiltroPeriodo(mode) {
+  const sel = document.getElementById('filter-periodo');
+  const lbl = document.getElementById('filter-periodo-label');
+
+  if (mode === 'daily') {
+    lbl.innerText = 'Data:';
+    const set = new Set();
+    globalData.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (d) set.add(formatDateBR(d));
+    });
+    const arr = Array.from(set).sort((a,b) => {
+      const pa = a.split('/'), pb = b.split('/');
+      return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`) - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`);
+    });
+    sel.innerHTML = arr.length
+      ? arr.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('')
+      : '<option value="">Sem datas</option>';
+    const hoje = formatDateBR(new Date());
+    sel.value = arr.includes(hoje) ? hoje : (arr[0] || '');
+
+  } else if (mode === 'weekly') {
+    lbl.innerText = 'Semana:';
+    const set = new Set();
+    globalData.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (d) set.add(weekKey(d));
+    });
+    const arr = Array.from(set).sort().reverse();
+    sel.innerHTML = arr.length
+      ? arr.map(k => {
+          const [y, w] = k.split('-W');
+          return `<option value="${esc(k)}">${parseInt(w)}w - ${esc(y)}</option>`;
+        }).join('')
+      : '<option value="">Sem semanas</option>';
+    const curKey = weekKey(new Date());
+    sel.value = arr.includes(curKey) ? curKey : (arr[0] || '');
+
+  } else {
+    lbl.innerText = 'Mês:';
+    const set = new Set();
+    globalData.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (d) set.add(monthKey(d));
+    });
+    const arr = Array.from(set).sort().reverse();
+    const nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    sel.innerHTML = arr.length
+      ? arr.map(k => {
+          const [y, m] = k.split('-');
+          return `<option value="${esc(k)}">${nomes[+m-1]}/${esc(y)}</option>`;
+        }).join('')
+      : '<option value="">Sem meses</option>';
+    const curKey = monthKey(new Date());
+    sel.value = arr.includes(curKey) ? curKey : (arr[0] || '');
+  }
+  selectedPeriod = sel.value;
+}
+
+function resetarFiltros() {
+  document.getElementById('filter-ciclo').value = 'TODOS';
+  aplicarFiltrosDashboard();
+}
+
+function aplicarFiltrosDashboard() {
+  const vPer  = document.getElementById('filter-periodo').value;
+  const vCiclo = document.getElementById('filter-ciclo').value;
+  selectedPeriod = vPer;
+
+  datasetFiltradoDashboard = globalData.filter(r => {
+    const d = parseDataBR(r[colMap.data]);
+    if (!d) return false;
+    
+    let okPer = false;
+    if (currentMode === 'daily') okPer = formatDateBR(d) === vPer;
+    else if (currentMode === 'weekly') okPer = weekKey(d) === vPer;
+    else okPer = monthKey(d) === vPer;
+
+    if (!okPer) return false;
+    if (vCiclo !== 'TODOS' && (r[colMap.ciclo] || '').trim().toUpperCase() !== vCiclo) return false;
+    return true;
+  });
+
+  const titulos = { daily:'DIÁRIO', weekly:'SEMANAL', monthly:'MENSAL' };
+  const sel = document.getElementById('filter-periodo');
+  selectedPeriodLabel = sel.options[sel.selectedIndex]?.text || vPer;
+  const cicloLabel = vCiclo !== 'TODOS' ? ` • Ciclo ${vCiclo}` : '';
+  document.getElementById('dashboard-title').innerText = `POKA YOKE ${titulos[currentMode]} — ${selectedPeriodLabel}${cicloLabel}`;
+
+  renderizarDashboard();
+  renderChartEvolucao();
+}
+
+function renderizarDashboard() {
+  let totals = { bipes: 0, erros: 0, gaiola: 0, forca: 0, falha: 0, probQR: 0, qrSem: 0 };
+  let cicloData = { 'AM': { bipes: 0, erros: 0 }, 'PM': { bipes: 0, erros: 0 }, 'SD': { bipes: 0, erros: 0 } };
+  let usuarios = {};
+
+  datasetFiltradoDashboard.forEach(r => {
+    const bipes = Number(r[colMap.bipes]) || 0;
+    const erros = Number(r[colMap.erros]) || 0;
+    const gaiola = Number(r[colMap.gaiola]) || 0;
+    const forca = Number(r[colMap.forca]) || 0;
+    const falha = Number(r[colMap.falha]) || 0;
+    const probQR = Number(r[colMap.probqr]) || 0;
+    const qrSem = Number(r[colMap.qrsem]) || 0;
+    const ciclo = (r[colMap.ciclo] || '').trim().toUpperCase();
+    const nome = (r[colMap.nome] || 'Não informado').trim();
+
+    totals.bipes += bipes;
+    totals.erros += erros;
+    totals.gaiola += gaiola;
+    totals.forca += forca;
+    totals.falha += falha;
+    totals.probQR += probQR;
+    totals.qrSem += qrSem;
+
+    if (cicloData[ciclo]) {
+      cicloData[ciclo].bipes += bipes;
+      cicloData[ciclo].erros += erros;
+    }
+
+    if (!usuarios[nome]) {
+      usuarios[nome] = { nome, bipes: 0, erros: 0, gaiola: 0, forca: 0, falha: 0, probQR: 0, qrSem: 0 };
+    }
+    usuarios[nome].bipes += bipes;
+    usuarios[nome].erros += erros;
+    usuarios[nome].gaiola += gaiola;
+    usuarios[nome].forca += forca;
+    usuarios[nome].falha += falha;
+    usuarios[nome].probQR += probQR;
+    usuarios[nome].qrSem += qrSem;
+  });
+
+  const userArray = Object.values(usuarios);
+  const pErro = totals.bipes > 0 ? ((totals.erros / totals.bipes) * 100).toFixed(2) : "0.00";
+  const pAssert = totals.bipes > 0 ? (100 - parseFloat(pErro)).toFixed(2) : "0.00";
+
+  // KPIs Gerais
+  document.getElementById('kpi-bipes').innerText = fmtNum(totals.bipes);
+  document.getElementById('kpi-erros').innerText = fmtNum(totals.erros);
+  document.getElementById('kpi-erros-pct').innerText = `${pErro}%`;
+  document.getElementById('kpi-assert').innerText = `${pAssert}%`;
+  document.getElementById('kpi-ofensores').innerText = userArray.filter(u => u.erros > 0).length;
+
+  // KPIs Ciclos
+  ['AM', 'PM', 'SD'].forEach(ciclo => {
+    const id = ciclo.toLowerCase();
+    const cBipes = cicloData[ciclo].bipes;
+    const cErros = cicloData[ciclo].erros;
+    const cTaxa = cBipes > 0 ? ((cErros / cBipes) * 100).toFixed(2) : "0.00";
+    document.getElementById(`kpi-${id}-bipes`).innerText = fmtNum(cBipes);
+    document.getElementById(`kpi-${id}-erros`).innerText = `${cErros} Erros (${cTaxa}%)`;
+  });
+
+  // Detalhamento de Erros
+  document.getElementById('tot-gaiola').innerText = fmtNum(totals.gaiola);
+  document.getElementById('tot-falha').innerText = fmtNum(totals.falha);
+  document.getElementById('tot-forca').innerText = fmtNum(totals.forca);
+  document.getElementById('tot-prob').innerText = fmtNum(totals.probQR);
+  document.getElementById('tot-qrsem').innerText = fmtNum(totals.qrSem);
+
+  // Top Ofensores (Agora com slice(0, 5))
+  const topOfensores = [...userArray].sort((a, b) => b.erros - a.erros || b.bipes - a.bipes);
+  const tbodyOfensores = document.querySelector('#table-ofensores tbody');
+  tbodyOfensores.innerHTML = topOfensores.slice(0, 5).map(u => {
+    const taxa = u.bipes > 0 ? ((u.erros / u.bipes) * 100).toFixed(2) : "0.00";
+    const tdErroClass = u.erros > 0 ? 'class="bg-red-600 text-white font-bold rounded"' : '';
+    return `<tr><td class="text-left font-bold capitalize text-gray-700">${esc(u.nome)}</td><td>${fmtNum(u.bipes)}</td><td ${tdErroClass}>${fmtNum(u.erros)}</td><td class="text-gray-500">${taxa}%</td></tr>`;
+  }).join('');
+
+  // Relação Total (Mantém todos no HTML, mas o CSS esconde após o 10º ao exportar)
+  const relacaoTotal = [...userArray].sort((a, b) => b.bipes - a.bipes);
+  const tbodyRelacao = document.querySelector('#table-relacao tbody');
+  tbodyRelacao.innerHTML = relacaoTotal.map(u => {
+    const errClass = u.erros > 0 ? "text-red-600 font-bold" : "text-gray-900 font-bold";
+    return `<tr>
+      <td class="text-left font-bold capitalize text-gray-700">${esc(u.nome)}</td>
+      <td class="font-bold">${fmtNum(u.bipes)}</td><td class="${errClass}">${fmtNum(u.erros)}</td>
+      <td class="text-gray-500">${fmtNum(u.gaiola)}</td><td class="text-gray-500">${fmtNum(u.forca)}</td><td class="text-gray-500">${fmtNum(u.falha)}</td>
+      <td class="text-gray-500">${fmtNum(u.probQR)}</td><td class="text-gray-500">${fmtNum(u.qrSem)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function getLastNWeeksEndingAt(endKey, n) {
+  const [yStr, wStr] = endKey.split('-W');
+  let isoYear = +yStr, week = +wStr;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.unshift({ isoYear, week, key:`${isoYear}-W${String(week).padStart(2,'0')}`, label:`${week}w` });
+    week--;
+    if (week < 1) { isoYear--; week = getISOWeeksInYear(isoYear); }
+  }
+  return out;
+}
+function getLastNMonthsEndingAt(endKey, n) {
+  const [yStr, mStr] = endKey.split('-');
+  let y = +yStr, m = +mStr - 1;
+  const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.unshift({ y, m, key:`${y}-${String(m+1).padStart(2,'0')}`, label:`${nomes[m]}/${String(y).slice(2)}` });
+    m--;
+    if (m < 0) { m = 11; y--; }
+  }
+  return out;
+}
+
+function renderChartEvolucao() {
+  let source = globalData;
+  let labels = [], valores = [], titulo = '';
+
+  if (currentMode === 'monthly') {
+    const months = getLastNMonthsEndingAt(selectedPeriod, 3);
+    const map = {}; months.forEach(m => map[m.key] = 0);
+    source.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (!d) return;
+      const k = monthKey(d);
+      if (map[k] !== undefined) map[k] += Number(r[colMap.bipes]) || 0;
+    });
+    labels = months.map(m => m.label);
+    valores = months.map(m => map[m.key]);
+    titulo = `Evolução (Bipes) - Últimos 3 meses`;
+  } else {
+    let endWeekKey = selectedPeriod;
+    if (currentMode === 'daily') {
+      const selDate = parseDataBR(selectedPeriod);
+      if (selDate) endWeekKey = weekKey(selDate);
+    }
+    const weeks = getLastNWeeksEndingAt(endWeekKey, 4);
+    const map = {}; weeks.forEach(w => map[w.key] = 0);
+    source.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (!d) return;
+      const k = weekKey(d);
+      if (map[k] !== undefined) map[k] += Number(r[colMap.bipes]) || 0;
+    });
+    labels = weeks.map(w => w.label);
+    valores = weeks.map(w => map[w.key]);
+    titulo = `Evolução (Bipes) - Últimas 4 semanas`;
+  }
+
+  document.getElementById('chart-evolucao-title').innerText = titulo;
+
+  const opts = {
+    chart: { type:'line', height:220, toolbar:{show:false} }, // Reduzi um pouco a altura do gráfico para equilibrar
+    series: [{ name:'Bipes', data: valores }],
+    xaxis: { categories: labels },
+    colors: ['#2D3277'],
+    dataLabels: { enabled:true, formatter: v => fmtNum(v), style: {fontSize: '10px'} },
+    stroke: { curve:'smooth', width:3 }
+  };
+
+  if (!chartEvolucao) {
+    chartEvolucao = new ApexCharts(document.querySelector('#chart-evolucao'), opts);
+    chartEvolucao.render();
+  } else {
+    chartEvolucao.updateOptions(opts);
+  }
+}
+
+// UPLOAD LÓGICA
+function mostrarArquivosSelecionados() {
+  const files = document.getElementById('file-multi').files;
+  const div = document.getElementById('lista-arquivos');
+  div.innerHTML = '';
+  if (files.length === 0) return;
+
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    let tipo = 'Desconhecido';
+    const name = f.name.toLowerCase();
+    if (name.includes('am')) tipo = 'AM';
+    else if (name.includes('pm')) tipo = 'PM';
+    else if (name.includes('sd')) tipo = 'SD';
+
+    div.innerHTML += `<div><i class="fa-solid fa-file-csv text-green-600 mr-2"></i> <b>${esc(f.name)}</b> <span class="text-xs bg-gray-200 px-2 py-0.5 rounded ml-2">Identificado como: ${tipo}</span></div>`;
+  }
+}
+
+async function enviarArquivos() {
+  const files = document.getElementById('file-multi').files;
+  if (!files || files.length === 0) return Swal.fire('Atenção', 'Selecione os arquivos CSV.', 'warning');
+
+  const loader = document.getElementById('loader-overlay');
+  loader.classList.add('show');
+
+  try {
+    const dataAtual = formatDateBR(new Date());
+    let contentAm = '', contentPm = '', contentSd = '';
+
+    const lerArquivo = (file) => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsText(file, 'UTF-8');
+      });
+    };
+
+    await Promise.all(Array.from(files).map(async (file) => {
+      const text = await lerArquivo(file);
+      const fname = file.name.toLowerCase();
+      if (fname.includes('am')) contentAm = text;
+      else if (fname.includes('pm')) contentPm = text;
+      else if (fname.includes('sd')) contentSd = text;
+    }));
+
+    if (!contentAm && !contentPm && !contentSd) throw new Error('Nenhum arquivo válido (AM, PM ou SD) encontrado.');
+
+    const resp = await callAPI('uploadCSVs', { data: dataAtual, am: contentAm, pm: contentPm, sd: contentSd });
+
+    await Swal.fire({ icon: 'success', title: 'Sucesso!', text: `${resp.inseridos} registros inseridos.`, confirmButtonColor: '#2D3277' });
+    
+    document.getElementById('file-multi').value = '';
+    document.getElementById('lista-arquivos').innerHTML = '';
+    globalData = [];
+    abrirTela('screen-menu');
+
+  } catch (err) {
+    Swal.fire({ icon:'error', title:'Erro', text: err.message, confirmButtonColor:'#2D3277' });
+  } finally {
+    loader.classList.remove('show');
+  }
+}
+
+function baixarImagem() {
+  if (!datasetFiltradoDashboard.length) return Swal.fire('Aviso','Sem dados para exportar.','warning');
+  document.getElementById('loader-overlay').classList.add('show');
+  document.body.classList.add('exporting-mode');
+
+  setTimeout(() => {
+    html2canvas(document.getElementById('capture-area'), { scale:2, useCORS:true })
+      .then(canvas => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = `PokaYoke_${currentMode}_${selectedPeriod.replace(/[^\w-]/g,'_')}.png`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        document.body.classList.remove('exporting-mode');
+        document.getElementById('loader-overlay').classList.remove('show');
+      })
+      .catch(() => {
+        document.body.classList.remove('exporting-mode');
+        document.getElementById('loader-overlay').classList.remove('show');
+        Swal.fire('Erro','Falha ao gerar imagem.','error');
+      });
+  }, 400);
+}
+</script>
+</body>
+</html>

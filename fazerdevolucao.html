@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel de Devolução</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  
+  <style>
+    :root { --azul: #2D3277; --amarelo: #FFD700; --fundo: #f4f6f9; }
+    body { font-family: 'Inter', system-ui, sans-serif; background-color: var(--fundo); user-select: none; }
+    .shadow-card { box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    .card-btn { transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
+    .card-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+    .spinner-gpu { will-change: transform; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #loader-overlay { display: none; }
+    .screen { display: none !important; }
+    .screen.active { display: block !important; animation: fadeIn 0.25s ease; }
+    #screen-bipagem.active { display: flex !important; flex-direction: column; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+    .list-container { max-height: 250px; overflow-y: auto; }
+
+    /* --- ESTILOS DO DASHBOARD --- */
+    .kpi-card { background:#fff; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.1); border-left:4px solid var(--amarelo); }
+    .kpi-title { font-size:12px; color:#666; text-transform:uppercase; font-weight:bold; margin-bottom:6px; }
+    .kpi-val { font-size: 26px; font-weight: 900; color: #111; line-height: 1.1; }
+    .table-container { max-height: 280px; overflow-y: auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { padding:8px 12px; text-align:left; border-bottom:1px solid #eee; }
+    th { background:#f8f9fa; position:sticky; top:0; color:#555; }
+    
+    /* Trava de Exportação do Dashboard */
+    body.exporting-mode #capture-dashboard { position: absolute !important; top: 0 !important; left: 0 !important; width: 1200px !important; height: auto !important; padding: 20px !important; background: #f4f6f9 !important; z-index: 99999 !important; }
+    body.exporting-mode .no-export { display: none !important; }
+
+    /* --- ESTILOS DO PREVIEW A4 --- */
+    #preview-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9999; overflow-y: auto; padding: 20px; }
+    #preview-modal .modal-content { background: #e9e9e9; max-width: 1000px; margin: 0 auto; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+    #preview-modal .modal-header { background: #2D3277; color: #fff; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+    #preview-modal .modal-body { padding: 20px; overflow-y: auto; max-height: calc(100vh - 150px); background: #525659; }
+    .folha-a4 { width: 210mm; height: 297mm; padding: 5mm; margin: 0 auto 20px; background: #fff; box-sizing: border-box; display: flex; flex-direction: column; box-shadow: 0 4px 15px rgba(0,0,0,0.3); position: relative; font-family: Arial, sans-serif; color: #000; }
+    .a4-content { border: 2px solid #2D3277; height: 100%; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; background: #fff; }
+    .a4-header { display: flex; border-bottom: 2px solid #2D3277; background: #fff; align-items: center;}
+    .a4-header .logo { width: 20%; text-align: center; padding: 4px; border-right: 2px solid #2D3277; }
+    .a4-header .logo img { height: 28px; object-fit: contain; }
+    .a4-header .titulo { width: 80%; text-align: center; padding: 6px; font-weight: 900; font-size: 18px; color: #2D3277; text-transform: uppercase; letter-spacing: 1px;}
+    .a4-subtitulo { text-align: center; font-size: 12px; font-weight: bold; border-bottom: 2px solid #2D3277; padding: 3px; background: #FFD700; color: #2D3277; }
+    .a4-resumo { display: flex; border-bottom: 2px solid #2D3277; text-align: center; font-size: 10px; background: #f9f9f9;}
+    .a4-resumo div { flex: 1; border-right: 2px solid #2D3277; padding: 4px; display: flex; flex-direction: column; justify-content: center;}
+    .a4-resumo div:last-child { border-right: none; }
+    .a4-resumo strong { display: block; font-size: 13px; margin-top: 2px; color: #2D3277;}
+    .a4-identificacao { border-bottom: 2px solid #2D3277; padding: 6px 10px; font-size: 11px; display: flex; justify-content: space-between; font-weight: bold; background: #f9f9f9;}
+    .a4-tabela-wrapper { flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .a4-tabela { width: 100%; border-collapse: collapse; table-layout: fixed; height: 100%; }
+    .a4-tabela th { background: #2D3277; color: #fff; font-weight: 900; font-size: 11px; padding: 4px; border-right: 2px solid #fff; border-bottom: 2px solid #2D3277; text-transform: uppercase; text-align: center; }
+    .a4-tabela th:last-child { border-right: none; }
+    .a4-tabela td { padding: 2px 5px; font-family: 'Courier New', monospace; font-size: 11px; border-right: 1px solid #ccc; border-bottom: 1px solid #ccc; text-align: center; white-space: nowrap; overflow: hidden; height: 5mm; }
+    .a4-tabela td:last-child { border-right: none; }
+    .a4-assinaturas { display: flex; justify-content: space-between; padding: 10px 10px 5px 10px; border-top: 2px solid #2D3277; background: #fff; flex-shrink: 0; }
+    .a4-assinatura { width: 45%; text-align: center; }
+    .a4-assinatura .nome { font-size: 12px; font-weight: 900; min-height: 16px; margin-bottom: 20px; text-transform: uppercase;}
+    .a4-assinatura .linha { border-top: 2px solid #000; margin-bottom: 3px; }
+    .a4-assinatura .label { font-size: 11px; font-weight: bold; }
+    
+    @media print {
+      body { background: #fff; margin: 0; padding: 0; overflow: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body * { visibility: hidden; }
+      #preview-modal, #preview-modal .modal-content, #preview-modal .modal-body, #print-area, #print-area * { visibility: visible; }
+      #preview-modal { position: absolute; left: 0; top: 0; background: transparent; padding: 0; display: block !important; overflow: visible; }
+      #preview-modal .modal-header { display: none !important; }
+      #preview-modal .modal-body { padding: 0; max-height: none; overflow: visible; background: transparent; }
+      #preview-modal .modal-content { max-width: none; border-radius: 0; box-shadow: none; }
+      .folha-a4 { margin: 0; box-shadow: none; width: 210mm; height: 297mm; padding: 5mm; page-break-after: always; }
+      .folha-a4:last-child { page-break-after: auto; }
+      @page { size: A4 portrait; margin: 0; }
+    }
+  </style>
+</head>
+<body class="p-4 md:p-6 text-gray-800 min-h-screen flex flex-col">
+
+  <div id="loader-overlay" class="fixed inset-0 bg-white/90 z-50 flex-col items-center justify-center no-export">
+    <i class="fas fa-circle-notch spinner-gpu text-5xl mb-4 text-[#2D3277]"></i>
+    <span id="loader-text" class="font-bold text-[#2D3277] text-lg tracking-wider">Processando...</span>
+  </div>
+
+  <!-- ================= TELA 1: MENU ================= -->
+  <div id="screen-menu" class="screen active w-full max-w-[1400px] mx-auto space-y-4 no-export">
+    
+    <div class="bg-gradient-to-r from-[#2D3277] to-gray-900 text-white p-4 md:px-6 md:py-4 rounded-xl flex justify-between items-center shadow-lg border-b-4 border-[#FFD700]">
+      <div class="flex items-center gap-3">
+        <span class="text-3xl drop-shadow">📦</span>
+        <div>
+          <h1 class="text-xl font-black uppercase tracking-wider">Painel Operacional</h1>
+          <p class="text-[#FFD700] font-bold text-xs">Gestão de Devoluções e HUs</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de Ações -->
+    <div class="bg-white p-4 rounded-xl shadow-card border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex flex-wrap gap-2 w-full md:w-auto justify-center md:justify-start">
+        <a href="https://docs.google.com/spreadsheets/d/1MwWb_3n42vtSTKyaIsw-Hx-s-pfEDd1QQWJiS5gWnZw/edit" target="_blank" class="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2 text-xs">
+          <i class="fas fa-file-excel"></i> Planilha
+        </a>
+        <button onclick="window.location.reload()" class="flex-1 md:flex-none bg-blue-500 hover:bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2 text-xs">
+          <i class="fas fa-sync-alt"></i> Atualizar
+        </button>
+        <button onclick="abrirManual()" class="flex-1 md:flex-none bg-[#2D3277] hover:bg-blue-900 text-white font-bold py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2 text-xs">
+          <i class="fas fa-book"></i> Manual
+        </button>
+      </div>
+      <div class="flex flex-wrap gap-2 w-full md:w-auto justify-center md:justify-end">
+        <button onclick="limparFormulario()" class="flex-1 md:flex-none bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2 text-xs">
+          <i class="fas fa-trash-alt"></i> Limpar Formulário
+        </button>
+        <button onclick="salvarDadosHistorico()" class="flex-1 md:flex-none bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2 text-xs">
+          <i class="fas fa-database"></i> Salvar Finalizadores
+        </button>
+        <button onclick="salvarDados20()" class="flex-1 md:flex-none bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2 text-xs">
+          <i class="fas fa-history"></i> Salvar 2.0
+        </button>
+      </div>
+    </div>
+
+    <!-- Cards de Ação (Agora com 7 itens) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-7 gap-4 mt-6">
+      <div onclick="abrirTelaDevolucao()" class="bg-white p-4 rounded-xl shadow-card border-l-4 border-blue-500 card-btn flex flex-col items-center text-center">
+        <div class="bg-blue-50 text-blue-500 w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-3"><i class="fas fa-file-signature"></i></div>
+        <h3 class="font-black text-gray-800 text-sm">1. Iniciar Devolução</h3>
+        <p class="text-[10px] text-gray-500 mt-1">Configurar Romaneio.</p>
+      </div>
+      <div onclick="abrirTelaBipagem()" class="bg-white p-4 rounded-xl shadow-card border-l-4 border-yellow-400 card-btn flex flex-col items-center text-center">
+        <div class="bg-yellow-50 text-yellow-500 w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-3"><i class="fas fa-barcode"></i></div>
+        <h3 class="font-black text-gray-800 text-sm">2. Projeto Azul 2.0</h3>
+        <p class="text-[10px] text-gray-500 mt-1">HUs Projeto Azul 2.0.</p>
+      </div>
+      <div onclick="abrirTelaDestinos()" class="bg-white p-4 rounded-xl shadow-card border-l-4 border-purple-500 card-btn flex flex-col items-center text-center">
+        <div class="bg-purple-50 text-purple-500 w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-3"><i class="fas fa-shipping-fast"></i></div>
+        <h3 class="font-black text-gray-800 text-sm">3. Finalizadores</h3>
+        <p class="text-[10px] text-gray-500 mt-1">Bipador F CROSS/FULL.</p>
+      </div>
+      <div onclick="escolherTipoImpressao('azul')" class="bg-white p-4 rounded-xl shadow-card border-l-4 border-teal-500 card-btn flex flex-col items-center text-center">
+        <div class="bg-teal-50 text-teal-500 w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-3"><i class="fas fa-print"></i></div>
+        <h3 class="font-black text-gray-800 text-sm">4. Gerar Projeto Azul</h3>
+        <p class="text-[10px] text-gray-500 mt-1">Imprimir Romaneio.</p>
+      </div>
+      <div onclick="escolherTipoImpressao('finalizador')" class="bg-white p-4 rounded-xl shadow-card border-l-4 border-orange-500 card-btn flex flex-col items-center text-center">
+        <div class="bg-orange-50 text-orange-500 w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-3"><i class="fas fa-file-invoice"></i></div>
+        <h3 class="font-black text-gray-800 text-sm">5. Gerar Finalizador</h3>
+        <p class="text-[10px] text-gray-500 mt-1">Imprimir Romaneio.</p>
+      </div>
+      <div onclick="abrirTelaDigitalizar()" class="bg-white p-4 rounded-xl shadow-card border-l-4 border-pink-500 card-btn flex flex-col items-center text-center">
+        <div class="bg-pink-50 text-pink-500 w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-3"><i class="fas fa-camera"></i></div>
+        <h3 class="font-black text-gray-800 text-sm">6. Digitalizar Doc</h3>
+        <p class="text-[10px] text-gray-500 mt-1">Foto para PDF no Drive.</p>
+      </div>
+      <!-- BOTÃO 7: DASHBOARD -->
+      <div onclick="abrirTela('screen-dashboard'); carregarDashboardDevolucao()" class="bg-white p-4 rounded-xl shadow-card border-l-4 border-gray-800 card-btn flex flex-col items-center text-center">
+        <div class="bg-gray-100 text-gray-800 w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-3"><i class="fas fa-chart-pie"></i></div>
+        <h3 class="font-black text-gray-800 text-sm">7. Dashboard</h3>
+        <p class="text-[10px] text-gray-500 mt-1">Status da Operação Atual.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TELA 7: DASHBOARD ================= -->
+  <div id="screen-dashboard" class="screen w-full max-w-[1200px] mx-auto">
+    <div id="capture-dashboard">
+      
+      <!-- Header para Exportação -->
+      <div class="bg-white rounded-lg shadow p-4 mb-4 text-center border-t-4 border-[#FFD700]">
+        <h2 class="text-2xl font-black text-[#2D3277] uppercase tracking-wider" id="dashboard-title">Devolução Para Expedir</h2>
+      </div>
+
+      <!-- Filtros (Ocultos na exportação) -->
+      <div class="flex justify-between items-center mb-4 no-export">
+        <h3 class="text-lg font-bold text-gray-700">Visão Geral</h3>
+        <div class="flex gap-2">
+          <button onclick="copiarResumoWhatsAppDev()" class="bg-[#25D366] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+            <i class="fa-brands fa-whatsapp"></i> Copiar P/ WhatsApp
+          </button>
+          <button onclick="baixarImagemDashboardDev()" class="bg-[#2D3277] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+            <i class="fa-solid fa-camera"></i> Exportar HD
+          </button>
+        </div>
+      </div>
+
+      <!-- KPIs Principais -->
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="kpi-card" style="border-left-color: #2D3277;">
+          <div class="kpi-title">Data / Expedição</div>
+          <div class="kpi-val text-xl" id="kpi-data">--/--/----</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: #FFD700;">
+          <div class="kpi-title">Lacre</div>
+          <div class="kpi-val text-xl" id="kpi-lacre">-</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: #10b981;">
+          <div class="kpi-title">Total de Paletes</div>
+          <div class="kpi-val" id="kpi-paletes">0</div>
+        </div>
+        <div class="kpi-card" style="border-left-color: #ea4335;">
+          <div class="kpi-title">Total de Pacotes</div>
+          <div class="kpi-val" id="kpi-total-pacotes">0</div>
+        </div>
+      </div>
+
+      <!-- Gráficos -->
+      <div class="grid grid-cols-3 gap-4 mb-6">
+        <div class="col-span-2 bg-white rounded-lg shadow p-4">
+          <h4 class="font-bold text-sm mb-2 text-gray-700">Volume Processado por Setor</h4>
+          <div id="chart-setores"></div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <h4 class="font-bold text-sm mb-2 text-gray-700">Distribuição Projeto Azul</h4>
+          <div id="chart-azul"></div>
+        </div>
+      </div>
+
+      <!-- Tabela de Resumo -->
+      <div class="bg-white rounded-lg shadow p-4">
+        <h4 class="font-bold text-sm mb-2 text-gray-700">Detalhamento dos Operadores</h4>
+        <div class="table-container">
+          <table id="table-dashboard">
+            <thead>
+              <tr>
+                <th>Setor</th>
+                <th>Operador Responsável</th>
+                <th>Volume Processado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><b>Projeto Azul</b></td><td id="tbl-op-azul">-</td><td id="tbl-vol-azul">0</td></tr>
+              <tr><td><b>Finalizador</b></td><td id="tbl-op-fin">-</td><td id="tbl-vol-fin">0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TELAS DE CADASTRO (OCULTAS INICIALMENTE) -->
+  <div id="screen-devolucao" class="screen w-full max-w-5xl mx-auto no-export">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-black text-[#2D3277]"><i class="fas fa-file-signature mr-2"></i> Dados da Devolução</h2>
+      <button onclick="abrirTela('screen-menu')" class="text-gray-500 hover:text-gray-800 font-bold bg-gray-200 px-4 py-2 rounded"><i class="fas fa-arrow-left mr-1"></i> Voltar</button>
+    </div>
+    <div class="bg-white p-6 rounded-xl shadow-card border border-gray-200 space-y-4">
+      <div>
+        <label class="text-xs font-black text-gray-500 uppercase mb-1 block">Data da Operação</label>
+        <input type="text" id="inp-data" placeholder="Ex: 26/10/2026" class="w-full border-2 border-gray-300 p-3 rounded font-bold text-gray-800 bg-yellow-50 focus:outline-none focus:border-[#2D3277]">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label class="text-xs font-black text-gray-500 uppercase mb-1 block">Op. Projeto Azul</label><input type="text" id="inp-op-azul" class="w-full border-2 border-gray-300 p-3 rounded font-bold text-gray-800 focus:outline-none focus:border-[#2D3277]"></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase mb-1 block">Op. Finalizador</label><input type="text" id="inp-op-fin" class="w-full border-2 border-gray-300 p-3 rounded font-bold text-gray-800 focus:outline-none focus:border-[#2D3277]"></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label class="text-xs font-black text-gray-500 uppercase mb-1 block">Lacre</label><input type="text" id="inp-lacre" class="w-full border-2 border-gray-300 p-3 rounded font-bold text-gray-800 focus:outline-none focus:border-[#2D3277]"></div>
+        <div><label class="text-xs font-black text-gray-500 uppercase mb-1 block">Total de Paletes</label><input type="number" id="inp-paletes" class="w-full border-2 border-gray-300 p-3 rounded font-bold text-gray-800 focus:outline-none focus:border-[#2D3277]"></div>
+      </div>
+      <button onclick="salvarDevolucao()" class="w-full bg-[#2D3277] hover:bg-blue-900 text-white font-black py-4 rounded-lg mt-4 shadow-lg transition flex justify-center items-center gap-2"><i class="fas fa-save"></i> GRAVAR NO ROMANEIO</button>
+    </div>
+  </div>
+
+  <div id="screen-bipagem" class="screen w-full max-w-6xl mx-auto no-export">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-black text-[#2D3277]"><i class="fas fa-barcode mr-2"></i> Projeto Azul 2.0</h2>
+      <button onclick="abrirTela('screen-menu')" class="text-gray-500 hover:text-gray-800 font-bold bg-gray-200 px-4 py-2 rounded"><i class="fas fa-arrow-left mr-1"></i> Voltar</button>
+    </div>
+    <div class="flex flex-col md:flex-row gap-4 flex-1">
+      <div class="flex-1 bg-white p-4 rounded-xl shadow-card border-t-4 border-blue-500 flex flex-col">
+        <h3 class="font-black text-blue-600 text-center mb-2"><i class="fas fa-random mr-1"></i> HUs CROSS</h3>
+        <textarea id="txt-cross" class="w-full h-24 border-2 border-blue-200 rounded p-2 font-mono text-xs focus:outline-none focus:border-blue-500 resize-none bg-blue-50 mb-2" placeholder="Cole novos HUs aqui..."></textarea>
+        <h4 class="font-bold text-gray-600 text-xs mb-1 border-b pb-1">HUs Salvos na Planilha</h4>
+        <div id="list-cross" class="list-container bg-gray-50 rounded border p-2 flex-1 space-y-1"></div>
+      </div>
+      <div class="flex-1 bg-white p-4 rounded-xl shadow-card border-t-4 border-yellow-400 flex flex-col">
+        <h3 class="font-black text-yellow-600 text-center mb-2"><i class="fas fa-boxes mr-1"></i> HUs FULL</h3>
+        <textarea id="txt-full" class="w-full h-24 border-2 border-yellow-200 rounded p-2 font-mono text-xs focus:outline-none focus:border-yellow-500 resize-none bg-yellow-50 mb-2" placeholder="Cole novos HUs aqui..."></textarea>
+        <h4 class="font-bold text-gray-600 text-xs mb-1 border-b pb-1">HUs Salvos na Planilha</h4>
+        <div id="list-full" class="list-container bg-gray-50 rounded border p-2 flex-1 space-y-1"></div>
+      </div>
+    </div>
+    <button onclick="salvarBipagem()" class="w-full bg-[#10b981] hover:bg-green-600 text-white font-black py-4 rounded-lg mt-4 shadow-lg transition flex justify-center items-center gap-2"><i class="fas fa-cloud-upload-alt"></i> SALVAR NOVOS HUs</button>
+  </div>
+
+  <div id="screen-destinos" class="screen w-full max-w-6xl mx-auto no-export">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-black text-[#2D3277]"><i class="fas fa-shipping-fast mr-2"></i> Finalizadores</h2>
+      <div class="flex gap-2">
+        <button onclick="atualizarMotivos()" class="bg-[#2D3277] hover:bg-blue-900 text-white font-bold px-4 py-2 rounded shadow transition flex items-center gap-2"><i class="fas fa-sync-alt"></i> Atualizar</button>
+        <button onclick="abrirTela('screen-menu')" class="text-gray-500 hover:text-gray-800 font-bold bg-gray-200 px-4 py-2 rounded"><i class="fas fa-arrow-left mr-1"></i> Voltar</button>
+      </div>
+    </div>
+    <div class="bg-white p-6 rounded-xl shadow-card border border-gray-200">
+      <div class="flex flex-col md:flex-row gap-4 mb-4">
+        <div class="flex-1">
+          <label class="text-xs font-black text-gray-500 uppercase mb-1 block">Selecione a Aba</label>
+          <select id="sel-aba-destino" onchange="atualizarMotivos()" class="w-full border-2 border-purple-300 p-3 rounded font-bold text-gray-800 bg-purple-50 focus:outline-none focus:border-purple-600">
+            <option value="F CROSS">F CROSS</option>
+            <option value="F FULL SP">F FULL SP</option>
+            <option value="F FULL SC">F FULL SC</option>
+          </select>
+        </div>
+        <div class="flex-[2]">
+          <label class="text-xs font-black text-gray-500 uppercase mb-1 block">Bipar Shipment (Enter)</label>
+          <input type="text" id="inp-scan" placeholder="Bipe o ID aqui..." class="w-full border-2 border-green-300 p-3 rounded font-bold text-gray-800 focus:outline-none focus:border-green-600 bg-green-50">
+        </div>
+      </div>
+      <div class="bg-gray-50 rounded-lg border border-gray-200 mt-4 overflow-hidden">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-gray-100 border-b">
+            <tr>
+              <th class="p-3 font-bold text-gray-600">Nº SHIPMENT</th>
+              <th class="p-3 font-bold text-gray-600">DESTINO</th>
+              <th class="p-3 font-bold text-gray-600">MOTIVO</th>
+            </tr>
+          </thead>
+          <tbody id="lista-destinos" class="divide-y divide-gray-200 bg-white">
+            <tr><td colspan="3" class="p-4 text-center text-gray-400">Selecione a aba e aguarde ou bipe um novo ID.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELA 6: DIGITALIZAR DOCUMENTO -->
+  <div id="screen-digitalizar" class="screen w-full max-w-4xl mx-auto no-export">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-black text-[#2D3277]"><i class="fas fa-camera mr-2"></i> Digitalizar Documento</h2>
+      <button onclick="abrirTela('screen-menu')" class="text-gray-500 hover:text-gray-800 font-bold bg-gray-200 px-4 py-2 rounded"><i class="fas fa-arrow-left mr-1"></i> Voltar</button>
+    </div>
+    
+    <div class="bg-white p-6 rounded-xl shadow-card border border-gray-200">
+      <div id="upload-area" class="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center hover:bg-gray-50 transition cursor-pointer relative">
+        <input type="file" id="file-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="carregarImagem(event)">
+        <i class="fas fa-cloud-upload-alt text-5xl text-blue-500 mb-4"></i>
+        <h3 class="font-bold text-lg text-gray-700">Clique ou arraste a foto aqui</h3>
+        <p class="text-sm text-gray-500 mt-2">Tire uma foto bem iluminada e reta do documento impresso.</p>
+      </div>
+
+      <div id="crop-area" class="hidden flex flex-col gap-4">
+        <p class="text-sm text-gray-600 font-bold bg-yellow-50 p-3 rounded border border-yellow-200">
+          <i class="fas fa-info-circle text-yellow-600 mr-2"></i> Ajuste os cantos da imagem para enquadrar apenas o documento (remova o fundo da mesa). Depois clique em <b>Gerar PDF</b>.
+        </p>
+        
+        <div class="w-full bg-gray-900 rounded overflow-hidden flex justify-center">
+          <img id="image-to-crop" src="" alt="Imagem para recorte" style="max-height: 400px; max-width: 100%;">
+        </div>
+
+        <div class="flex gap-3 mt-2">
+          <button onclick="resetarDigitalizador()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 rounded-lg transition"><i class="fas fa-redo"></i> Escolher Outra Foto</button>
+          <button onclick="gerarPdf()" class="flex-[2] bg-[#2D3277] hover:bg-blue-900 text-white font-black py-3 rounded-lg shadow transition flex justify-center items-center gap-2"><i class="fas fa-file-pdf"></i> Gerar PDF e Baixar</button>
+        </div>
+        
+        <button id="btn-salvar-drive" onclick="salvarNoDrive()" class="hidden mt-2 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow transition flex justify-center items-center gap-2"><i class="fab fa-google-drive"></i> Salvar Direto no Google Drive</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DE PREVIEW A4 ================= -->
+  <div id="preview-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="text-lg font-black"><i class="fas fa-eye mr-2"></i> Pré-visualização (Clique para editar)</h3>
+        <div class="flex gap-2">
+          <button onclick="window.print()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded shadow transition"><i class="fas fa-print"></i> Imprimir</button>
+          <button onclick="fecharPreview()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded shadow transition"><i class="fas fa-times"></i> Fechar</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div id="print-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxeN7QP509TPTcO1yoSkcJPoxpevevcu9spSqg8v-Ytq68BWuGmESn6hTFBb25NIjmHpA/exec';
+    const ML_LOGO = 'https://upload.wikimedia.org/wikipedia/pt/0/04/Logotipo_MercadoLivre.png';
+
+    let dadosDashboardGlobal = null;
+    let chartSetores = null;
+    let chartAzul = null;
+
+    // ================================================================
+    // MANUAL
+    // ================================================================
+    function abrirManual() {
+      const htmlManual = `
+        <div class="text-left text-sm text-gray-700 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+          <p class="text-gray-600 mb-2">Bem-vindo ao sistema! Abaixo está o passo a passo de como utilizar cada função.</p>
+          <div class="bg-blue-50 p-3 rounded border-l-4 border-blue-500">
+            <h4 class="font-bold text-blue-800"><i class="fas fa-file-signature mr-1"></i> 1. Iniciar Devolução</h4>
+            <p class="mt-1">Preencha os dados básicos (Data, Operador, Lacre, Paletes).</p>
+          </div>
+          <div class="bg-yellow-50 p-3 rounded border-l-4 border-yellow-500">
+            <h4 class="font-bold text-yellow-800"><i class="fas fa-barcode mr-1"></i> 2. Projeto Azul 2.0</h4>
+            <p class="mt-1">Cole a lista de HUs Cross e Full. O sistema envia para a planilha.</p>
+          </div>
+          <div class="bg-purple-50 p-3 rounded border-l-4 border-purple-500">
+            <h4 class="font-bold text-purple-800"><i class="fas fa-shipping-fast mr-1"></i> 3. Finalizadores</h4>
+            <p class="mt-1">Bipe os pacotes. Salva automaticamente.</p>
+          </div>
+          <div class="bg-teal-50 p-3 rounded border-l-4 border-teal-500">
+            <h4 class="font-bold text-teal-800"><i class="fas fa-print mr-1"></i> 4 e 5. Gerar Impressão</h4>
+            <p class="mt-1">Gere o romaneio A4 e edite se precisar antes de imprimir.</p>
+          </div>
+          <div class="bg-pink-50 p-3 rounded border-l-4 border-pink-500">
+            <h4 class="font-bold text-pink-800"><i class="fas fa-camera mr-1"></i> 6. Digitalizar Doc</h4>
+            <p class="mt-1">Tire foto do documento impresso, ajuste os cantos e salve o PDF direto no seu Google Drive.</p>
+          </div>
+          <div class="bg-gray-100 p-3 rounded border-l-4 border-gray-800">
+            <h4 class="font-bold text-gray-800"><i class="fas fa-chart-pie mr-1"></i> 7. Dashboard</h4>
+            <p class="mt-1">Exibe o resumo do dia, com volumetria, operadores e permite exportar para WhatsApp.</p>
+          </div>
+        </div>
+      `;
+      Swal.fire({ title: '<span class="text-xl font-black text-[#2D3277]"><i class="fas fa-book-open mr-2"></i>Manual do Sistema</span>', html: htmlManual, width: '700px', confirmButtonColor: '#2D3277', confirmButtonText: 'Entendi' });
+    }
+
+    // ================================================================
+    // HELPERS
+    // ================================================================
+    const somSucesso = new Audio('https://www.myinstants.com/media/sounds/success-bell.mp3');
+    function tocarSom() { try { somSucesso.currentTime = 0; const p = somSucesso.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+    function showLoader(msg) { document.getElementById('loader-text').innerText = msg || 'Processando...'; document.getElementById('loader-overlay').style.display = 'flex'; }
+    function hideLoader() { document.getElementById('loader-overlay').style.display = 'none'; }
+    function abrirTela(id) { document.querySelectorAll('.screen').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+    
+    async function callAPI(action, payload = {}) {
+      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }), redirect: 'follow' });
+      const text = await res.text();
+      try { return JSON.parse(text); } catch (e) { throw new Error('Erro API: ' + text.substring(0, 100)); }
+    }
+
+    // ================================================================
+    // AÇÕES ADMINISTRATIVAS
+    // ================================================================
+    function limparFormulario() {
+      Swal.fire({ title: 'Limpar Formulário?', text: 'Isso apagará tudo da linha 2 para baixo na aba Formulario.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#e74c3c', confirmButtonText: 'Sim, limpar!' }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        showLoader('Limpando...'); try { const res = await callAPI('limparFormulario'); hideLoader(); if (res.success) { tocarSom(); Swal.fire('Limpo!', res.message, 'success'); } else Swal.fire('Erro', res.erro, 'error'); } catch (e) { hideLoader(); Swal.fire('Erro', e.message, 'error'); }
+      });
+    }
+    function salvarDadosHistorico() {
+      Swal.fire({ title: 'Salvar Finalizadores?', text: 'Os dados de (F CROSS, F FULL SP e F FULL SC) serão movidos para o Histórico Finalizador.', icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981', confirmButtonText: 'Sim, Salvar e Limpar!' }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        showLoader('Copiando...'); try { const res = await callAPI('salvarHistoricoFinalizador'); hideLoader(); if (res.success) { tocarSom(); Swal.fire('Concluído!', res.message, 'success'); } else Swal.fire('Erro', res.erro, 'error'); } catch (e) { hideLoader(); Swal.fire('Erro', e.message, 'error'); }
+      });
+    }
+    function salvarDados20() {
+      Swal.fire({ title: 'Salvar 2.0?', text: 'Os dados da aba "Hus Atualizar" serão filtrados (FULL e CROSS) e salvos em "Historico IDs".', icon: 'question', showCancelButton: true, confirmButtonColor: '#3b82f6', confirmButtonText: 'Sim, Processar!' }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        showLoader('Processando...'); try { const res = await callAPI('salvarHistoricoIDs20'); hideLoader(); if (res.success) { tocarSom(); Swal.fire('Concluído!', res.message, 'success'); } else Swal.fire('Erro', res.erro, 'error'); } catch (e) { hideLoader(); Swal.fire('Erro', e.message, 'error'); }
+      });
+    }
+
+    // ================================================================
+    // MENU E TELAS DE CADASTRO
+    // ================================================================
+    async function abrirTelaDevolucao() {
+      showLoader('Carregando...'); try {
+        const res = await callAPI('buscarDadosAtuaisFormulario'); hideLoader(); abrirTela('screen-devolucao');
+        if (res.success && res.dados) {
+          document.getElementById('inp-data').value = res.dados.data; document.getElementById('inp-op-azul').value = res.dados.opAzul;
+          document.getElementById('inp-op-fin').value = res.dados.opFin; document.getElementById('inp-lacre').value = res.dados.lacre;
+          document.getElementById('inp-paletes').value = res.dados.paletes;
+        }
+      } catch (e) { hideLoader(); Swal.fire('Erro', e.message, 'error'); }
+    }
+    async function salvarDevolucao() {
+      const data = document.getElementById('inp-data').value.trim();
+      if (!data) return Swal.fire('Atenção', 'A Data é obrigatória!', 'warning');
+      const payload = { data, opAzul: document.getElementById('inp-op-azul').value.trim(), opFin: document.getElementById('inp-op-fin').value.trim(), lacre: document.getElementById('inp-lacre').value.trim(), paletes: document.getElementById('inp-paletes').value.trim() };
+      showLoader('Gravando...'); try {
+        const res = await callAPI('salvarCabecalhoDevolucao', payload); hideLoader();
+        if (res.success) { tocarSom(); Swal.fire('Pronto!', res.message, 'success'); } else Swal.fire('Erro', res.erro, 'error');
+      } catch (e) { hideLoader(); Swal.fire('Erro', e.message, 'error'); }
+    }
+
+    function abrirTelaBipagem() { abrirTela('screen-bipagem'); atualizarListaHUs(); }
+    async function atualizarListaHUs() {
+      document.getElementById('list-cross').innerHTML = '<div class="text-center text-xs p-2">Carregando...</div>';
+      try {
+        const res = await callAPI('listarHUsBipados');
+        if (res.success) {
+          renderHUList('list-cross', res.cross, 'cross'); renderHUList('list-full', res.full, 'full');
+        }
+      } catch (e) { console.error(e); }
+    }
+    function renderHUList(id, arr, tipo) {
+      const c = document.getElementById(id);
+      if (!arr || arr.length === 0) { c.innerHTML = '<div class="text-center text-xs text-gray-400 p-2">Nenhum HU salvo.</div>'; return; }
+      let html = '';
+      arr.forEach(hu => {
+        html += `<div class="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-gray-100 text-xs font-mono mb-1"><span class="text-gray-700">${hu}</span><button onclick="deletarHU('${tipo}', '${hu}')" class="text-red-500 hover:bg-red-50 rounded p-1 transition"><i class="fas fa-trash-alt"></i></button></div>`;
+      });
+      c.innerHTML = html;
+    }
+    async function deletarHU(tipo, hu) {
+      showLoader('Excluindo...'); try { await callAPI('deletarHUBipado', { tipo, hu }); hideLoader(); atualizarListaHUs(); } catch (e) { hideLoader(); }
+    }
+    async function salvarBipagem() {
+      const cross = document.getElementById('txt-cross').value.split('\n').map(i => i.trim()).filter(i => i !== '');
+      const full = document.getElementById('txt-full').value.split('\n').map(i => i.trim()).filter(i => i !== '');
+      if (cross.length === 0 && full.length === 0) return Swal.fire('Aviso', 'Nenhum HU para salvar.', 'warning');
+      showLoader('Salvando...'); try {
+        const res = await callAPI('salvarHUsBipados', { cross, full }); hideLoader();
+        if (res.success) { tocarSom(); document.getElementById('txt-cross').value = ''; document.getElementById('txt-full').value = ''; atualizarListaHUs(); }
+      } catch (e) { hideLoader(); }
+    }
+
+    function abrirTelaDestinos() { abrirTela('screen-destinos'); document.getElementById('inp-scan').focus(); atualizarMotivos(); }
+    document.addEventListener('DOMContentLoaded', () => {
+      const scan = document.getElementById('inp-scan');
+      if (scan) scan.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); processarScan(); } });
+    });
+    async function processarScan() {
+      const aba = document.getElementById('sel-aba-destino').value, id = document.getElementById('inp-scan').value.trim();
+      if (!id) return; document.getElementById('inp-scan').value = '';
+      const tbody = document.getElementById('lista-destinos'), tempDest = (aba === 'F CROSS') ? 'BRXSC2' : 'BRSC02';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="p-3 font-mono text-green-600 font-bold">${id} <i class="fas fa-spinner fa-spin"></i></td><td class="p-3 text-gray-600">${tempDest}</td><td class="p-3 text-gray-400 text-xs">Salvando...</td>`;
+      tbody.insertBefore(tr, tbody.firstChild);
+      try {
+        const res = await callAPI('salvarShipmentRapido', { nomeAba: aba, idBipado: id });
+        if (res.success) { tocarSom(); tr.innerHTML = `<td class="p-3 font-mono font-bold">${res.id}</td><td class="p-3 font-bold text-[#2D3277]">${res.destino}</td><td class="p-3 text-gray-400">-</td>`; }
+      } catch (err) { tr.innerHTML = `<td colspan="3" class="p-3 text-red-500">Erro de rede</td>`; }
+      document.getElementById('inp-scan').focus();
+    }
+    async function atualizarMotivos() {
+      const aba = document.getElementById('sel-aba-destino').value, tbody = document.getElementById('lista-destinos');
+      tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center"><i class="fas fa-spinner fa-spin"></i> Puxando...</td></tr>`;
+      try {
+        const res = await callAPI('buscarMotivosShipments', { nomeAba: aba });
+        if (res.success && res.dados.length > 0) {
+          let html = '';
+          res.dados.forEach(d => { html += `<tr><td class="p-3 font-mono font-bold">${d.id}</td><td class="p-3 font-bold text-[#2D3277]">${d.destino}</td><td class="p-3">${d.motivo || '-'}</td></tr>`; });
+          tbody.innerHTML = html;
+        } else { tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-gray-400">Vazio.</td></tr>`; }
+      } catch (e) { tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-red-500">Erro.</td></tr>`; }
+      document.getElementById('inp-scan').focus();
+    }
+
+    // ================================================================
+    // DASHBOARD DE DEVOLUÇÃO (BOTÃO 7)
+    // ================================================================
+    async function carregarDashboardDevolucao() {
+      const dataHoje = new Date().toLocaleDateString('pt-BR');
+      document.getElementById('dashboard-title').innerText = `Devolução Para Expedir - ${dataHoje}`;
+      
+      showLoader('Carregando Dashboard...');
+      try {
+        const res = await callAPI('getDashboardDevolucao');
+        hideLoader();
+        if (!res.success) return Swal.fire('Erro', res.erro, 'error');
+        
+        dadosDashboardGlobal = res.data;
+        
+        // Atualiza o título com a data exata que veio da planilha
+        document.getElementById('dashboard-title').innerText = `Devolução Para Expedir - ${dadosDashboardGlobal.form.data}`;
+        
+        preencherKPIsDashboard();
+        renderizarGraficosDashboard();
+        
+      } catch (e) {
+        hideLoader();
+        Swal.fire('Erro', 'Falha ao carregar dados do Dashboard.', 'error');
+      }
+    }
+
+    function preencherKPIsDashboard() {
+      const d = dadosDashboardGlobal;
+      
+      document.getElementById('kpi-data').innerText = d.form.data;
+      document.getElementById('kpi-lacre').innerText = d.form.lacre;
+      document.getElementById('kpi-paletes').innerText = d.form.paletes;
+      document.getElementById('kpi-total-pacotes').innerText = d.azul.total + d.finalizador.total;
+
+      document.getElementById('tbl-op-azul').innerText = d.form.opAzul;
+      document.getElementById('tbl-vol-azul').innerText = d.azul.total + ' pacotes (Cross: ' + d.azul.cross + ' / Full: ' + d.azul.full + ')';
+      
+      document.getElementById('tbl-op-fin').innerText = d.form.opFin;
+      document.getElementById('tbl-vol-fin').innerText = d.finalizador.total + ' pacotes (Cross: ' + d.finalizador.cross + ' / SP: ' + d.finalizador.sp + ' / SC: ' + d.finalizador.sc + ')';
+    }
+
+    function renderizarGraficosDashboard() {
+      const d = dadosDashboardGlobal;
+
+      // Gráfico 1: Bar Chart - Volume por Setor
+      const optSetores = {
+        chart: { type: 'bar', height: 280, toolbar: { show: false } },
+        plotOptions: { bar: { columnWidth: '50%', borderRadius: 4 } },
+        series: [{ name: 'Pacotes', data: [d.azul.total, d.finalizador.total] }],
+        xaxis: { categories: ['Projeto Azul', 'Finalizador'] },
+        colors: ['#2D3277', '#FFD700'],
+        dataLabels: { enabled: true, style: { fontSize: '14px', fontWeight: 'bold' } }
+      };
+      
+      // Gráfico 2: Donut - Cross vs Full
+      const optAzul = {
+        chart: { type: 'donut', height: 280 },
+        series: [d.azul.cross, d.azul.full],
+        labels: ['CROSS', 'FULL'],
+        colors: ['#3b82f6', '#facc15'],
+        legend: { position: 'bottom' }
+      };
+
+      if (chartSetores) chartSetores.destroy();
+      if (chartAzul) chartAzul.destroy();
+
+      chartSetores = new ApexCharts(document.querySelector("#chart-setores"), optSetores);
+      chartAzul = new ApexCharts(document.querySelector("#chart-azul"), optAzul);
+      
+      chartSetores.render();
+      chartAzul.render();
+    }
+
+    // ================================================================
+    // EXPORTAR E WHATSAPP (DASHBOARD)
+    // ================================================================
+    function baixarImagemDashboardDev() {
+      if (!dadosDashboardGlobal) return Swal.fire('Aviso', 'Sem dados para exportar.', 'warning');
+      
+      showLoader('Gerando Imagem em HD...');
+      document.body.classList.add('exporting-mode');
+      
+      setTimeout(() => {
+        html2canvas(document.getElementById('capture-dashboard'), { scale: 2, useCORS: true }).then(canvas => {
+          const link = document.createElement('a');
+          link.href = canvas.toDataURL('image/png');
+          link.download = `Dashboard_Devolucao_${new Date().toISOString().split('T')[0]}.png`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+          
+          document.body.classList.remove('exporting-mode');
+          hideLoader();
+          tocarSom();
+        }).catch(err => {
+          document.body.classList.remove('exporting-mode');
+          hideLoader();
+          Swal.fire('Erro', 'Falha ao gerar imagem.', 'error');
+        });
+      }, 500);
+    }
+
+    function copiarResumoWhatsAppDev() {
+      if (!dadosDashboardGlobal) return Swal.fire('Aviso', 'Sem dados para copiar.', 'warning');
+
+      const d = dadosDashboardGlobal;
+      const hora = new Date().getHours();
+      let saudacao = hora >= 18 ? "Boa Noite" : hora >= 12 ? "Boa Tarde" : "Bom Dia";
+      
+      const mensagem = `Olá, time! ${saudacao}. Tudo bem?\n\n` +
+        `Segue o balanço consolidado da operação de devolução para expedição referente ao dia *${d.form.data}*.\n\n` +
+        `📦 *Resumo Geral*\n` +
+        `- Lacre: ${d.form.lacre}\n` +
+        `- Paletes Movimentados: ${d.form.paletes}\n\n` +
+        `🔵 *Projeto Azul*\n` +
+        `- Operador Responsável: ${d.form.opAzul}\n` +
+        `- Volume processado: ${d.azul.total} pacotes (${d.azul.cross} CROSS / ${d.azul.full} FULL)\n\n` +
+        `🟣 *Finalizadores*\n` +
+        `- Operador Responsável: ${d.form.opFin}\n` +
+        `- Volume processado: ${d.finalizador.total} pacotes (${d.finalizador.cross} CROSS / ${d.finalizador.sp} FULL SP / ${d.finalizador.sc} FULL SC)\n\n` +
+        `Esses são os números atualizados até o momento. Caso precisem de alguma informação detalhada, estou à disposição.\n\n` +
+        `Excelente trabalho a todos!`;
+
+      navigator.clipboard.writeText(mensagem).then(() => {
+        tocarSom();
+        Swal.fire("Copiado!", "O resumo foi copiado para a área de transferência. Basta colar no WhatsApp.", "success");
+      });
+    }
+
+    // ================================================================
+    // PREVIEW E IMPRESSÃO (A4) - MANTIDOS
+    // ================================================================
+    function buildA4Pages(dados, tipo, form, isProjetoAzul) {
+      const itemsPerPage = 35;
+      const totalPages = Math.ceil(dados.length / itemsPerPage) || 1;
+      let htmlFinal = '';
+      const destinoOrigem = (tipo === 'CROSS') ? 'BRXSC2' : (isProjetoAzul ? 'BRXSC2' : 'BRSC02');
+
+      for (let p = 0; p < totalPages; p++) {
+        const start = p * itemsPerPage;
+        const pageData = dados.slice(start, start + itemsPerPage);
+        const isLastPage = (p === totalPages - 1);
+
+        let rows = '';
+        for (let i = 0; i < pageData.length; i++) {
+          rows += `<tr><td>${pageData[i].c1 || ''}</td><td>${pageData[i].c2 || ''}</td><td>${pageData[i].c3 || ''}</td></tr>`;
+        }
+        for (let i = pageData.length; i < itemsPerPage; i++) {
+          rows += `<tr><td>&nbsp;</td><td></td><td></td></tr>`;
+        }
+
+        let assinaturas = '';
+        if (isLastPage) {
+          assinaturas = `
+            <div class="a4-assinaturas">
+              <div class="a4-assinatura">
+                <div class="nome">${isProjetoAzul ? form.opAzul : form.opFin}</div>
+                <div class="linha"></div>
+                <div class="label">Nome Operador</div>
+              </div>
+              <div class="a4-assinatura">
+                <div class="nome"></div>
+                <div class="linha"></div>
+                <div class="label">Assinatura Motorista</div>
+              </div>
+            </div>
+          `;
+        }
+
+        let cabecalho = '';
+        if (p === 0) {
+          cabecalho = `
+            <div class="a4-header">
+              <div class="logo"><img src="${ML_LOGO}" alt="Mercado Livre"></div>
+              <div class="titulo">${isProjetoAzul ? 'Projeto Azul' : 'Romaneio'} - ${tipo}</div>
+            </div>
+            <div class="a4-subtitulo">SVC - ${tipo}</div>
+            <div class="a4-resumo">
+              <div>ORIGEM/DESTINO<strong>${destinoOrigem}</strong></div>
+              ${isProjetoAzul ? `<div>TOTAL DE HU's<strong>${dados.length}</strong></div>` : `<div style="visibility: hidden;"></div>`}
+            </div>
+            <div class="a4-identificacao">
+              <span>DATA: ${form.data}</span><span>LACRE: ${form.lacre}</span><span>PALETES: ${form.paletes}</span>
+            </div>
+          `;
+        }
+
+        htmlFinal += `
+          <div class="folha-a4">
+            <div class="a4-content">
+              ${cabecalho}
+              <div class="a4-tabela-wrapper">
+                <table class="a4-tabela">
+                  <thead>
+                    <tr>
+                      <th style="width: 33%">${isProjetoAzul ? 'ID SHIPMENT' : 'Nº SHIPMENT'}</th>
+                      <th style="width: 33%">${isProjetoAzul ? 'ID SHIPMENT 2.0' : 'DESTINO'}</th>
+                      <th style="width: 34%">${isProjetoAzul ? 'CÓDIGO (HU)' : 'MOTIVO'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
+              ${assinaturas}
+            </div>
+          </div>
+        `;
+      }
+      return htmlFinal;
+    }
+
+    async function escolherTipoImpressao(origem) {
+      let opcoes = {};
+      if (origem === 'azul') {
+        opcoes = { 'CROSS': 'Projeto Azul CROSS', 'FULL': 'Projeto Azul FULL' };
+      } else {
+        opcoes = { 'F CROSS': 'F CROSS', 'F FULL SP': 'F FULL SP', 'F FULL SC': 'F FULL SC' };
+      }
+
+      const { value: tipo } = await Swal.fire({
+        title: 'Qual tipo você quer gerar?', input: 'select', inputOptions: opcoes,
+        inputPlaceholder: 'Selecione o tipo', showCancelButton: true,
+        confirmButtonText: 'Gerar', confirmButtonColor: '#2D3277', cancelButtonText: 'Cancelar'
+      });
+
+      if (!tipo) return;
+      
+      if (origem === 'azul') gerarPreview('obterPreviewProjetoAzul', tipo);
+      else gerarPreview('obterPreviewFinalizador', tipo);
+    }
+
+    async function gerarPreview(action, tipo) {
+      showLoader('Preparando Prévia...');
+      try {
+        const res = await callAPI(action, { tipo });
+        hideLoader();
+        
+        if (!res.success) return Swal.fire('Erro', res.erro, 'error');
+        if (!res.dados || res.dados.length === 0) return Swal.fire('Aviso', 'Nenhum dado encontrado para esta data.', 'warning');
+
+        const isProjetoAzul = (action === 'obterPreviewProjetoAzul');
+        const htmlFolhas = buildA4Pages(res.dados, tipo, res.form, isProjetoAzul);
+
+        document.getElementById('print-area').innerHTML = htmlFolhas;
+        document.getElementById('preview-modal').style.display = 'block';
+        
+      } catch (e) { hideLoader(); Swal.fire('Erro', e.message, 'error'); }
+    }
+
+    function fecharPreview() {
+      document.getElementById('preview-modal').style.display = 'none';
+      document.getElementById('print-area').innerHTML = '';
+    }
+
+    // ================================================================
+    // BOTÃO 6: DIGITALIZAR DOCUMENTO - MANTIDO
+    // ================================================================
+    let cropper = null;
+    let pdfBase64Global = null;
+    
+    function abrirTelaDigitalizar() {
+      abrirTela('screen-digitalizar');
+      resetarDigitalizador();
+    }
+
+    function resetarDigitalizador() {
+      if (cropper) { cropper.destroy(); cropper = null; }
+      document.getElementById('file-input').value = '';
+      document.getElementById('upload-area').classList.remove('hidden');
+      document.getElementById('crop-area').classList.add('hidden');
+      document.getElementById('btn-salvar-drive').classList.add('hidden');
+      document.getElementById('image-to-crop').src = '';
+      pdfBase64Global = null;
+    }
+
+    function carregarImagem(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('upload-area').classList.add('hidden');
+        document.getElementById('crop-area').classList.remove('hidden');
+        
+        const img = document.getElementById('image-to-crop');
+        img.src = e.target.result;
+        
+        if (cropper) { cropper.destroy(); }
+        cropper = new Cropper(img, {
+          viewMode: 1,
+          dragMode: 'move',
+          autoCropArea: 1,
+          restore: false,
+          guides: true,
+          center: true,
+          highlight: false,
+          cropBoxMovable: true,
+          cropBoxResizable: true,
+          toggleDragModeOnDblclick: false,
+          background: false
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function gerarPdf() {
+      if (!cropper) return;
+      showLoader('Gerando PDF...');
+      
+      try {
+        const canvas = cropper.getCroppedCanvas({
+          maxWidth: 4096,
+          maxHeight: 4096,
+          fillColor: '#fff',
+          imageSmoothingEnabled: true,
+          imageSmoothingQuality: 'high',
+        });
+        
+        const imgData = canvas.toDataURL('image/jpeg', 0.9);
+        const { jsPDF } = window.jspdf;
+        
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const isLandscape = canvasWidth > canvasHeight;
+        
+        const pdf = new jsPDF({
+          orientation: isLandscape ? 'landscape' : 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+        
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        const ratio = Math.min(pdfWidth / canvasWidth, pdfHeight / canvasHeight);
+        const newWidth = canvasWidth * ratio;
+        const newHeight = canvasHeight * ratio;
+        const x = (pdfWidth - newWidth) / 2;
+        const y = (pdfHeight - newHeight) / 2;
+        
+        pdf.addImage(imgData, 'JPEG', x, y, newWidth, newHeight, undefined, 'FAST');
+        
+        pdfBase64Global = pdf.output('datauristring');
+        pdf.save('Romaneio_' + new Date().getTime() + '.pdf');
+        
+        hideLoader();
+        tocarSom();
+        
+        document.getElementById('btn-salvar-drive').classList.remove('hidden');
+        Swal.fire('PDF Gerado!', 'O download do PDF foi iniciado. Se quiser, pode salvar uma cópia diretamente no Google Drive clicando no botão abaixo.', 'success');
+        
+      } catch (error) {
+        hideLoader();
+        Swal.fire('Erro', 'Não foi possível gerar o PDF: ' + error.message, 'error');
+      }
+    }
+
+    async function salvarNoDrive() {
+      if (!pdfBase64Global) return;
+      showLoader('Enviando para o Google Drive...');
+      
+      try {
+        const filename = 'Romaneio_' + new Date().toLocaleDateString('pt-BR').replace(/\//g, '-') + '_' + new Date().getTime() + '.pdf';
+        const res = await callAPI('salvarPdfNoDrive', { pdfBase64: pdfBase64Global, filename: filename });
+        
+        hideLoader();
+        if (res.success) {
+          tocarSom();
+          Swal.fire({
+            title: 'Salvo no Drive!',
+            html: `O arquivo foi salvo na sua pasta.<br><br><a href="${res.url}" target="_blank" class="text-blue-600 font-bold underline">Clique aqui para abrir o PDF</a>`,
+            icon: 'success'
+          });
+        } else {
+          Swal.fire('Erro', res.erro, 'error');
+        }
+      } catch (e) {
+        hideLoader();
+        Swal.fire('Erro de Conexão', e.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

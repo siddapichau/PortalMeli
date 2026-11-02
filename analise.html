@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Análise Completa - BPP 2026</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  
+  <style>
+    body { background-color: #f4f6f9; font-family: 'Inter', sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+    
+    /* Loading Screen */
+    @keyframes driveGhostTruck { 0% { left: -20%; } 100% { left: 120%; } }
+    #ghost-truck-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 99999; display: none; flex-direction: column; justify-content: center; align-items: center; background: rgba(244, 246, 249, 0.95); backdrop-filter: blur(3px); }
+    
+    .ghost-truck-container { position: absolute; top: 40%; width: 100%; overflow: hidden; opacity: 0.1; display: flex; justify-content: flex-start; }
+    .ghost-truck-icon { font-size: 150px; color: #2D3277; animation: driveGhostTruck 5s linear infinite; position: relative; }
+
+    /* Progress Card */
+    .progress-card { position: relative; z-index: 10; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); width: 100%; max-width: 500px; text-align: center; border-top: 6px solid #FFD700; }
+    
+    /* Barra de Progresso Topo (Fina) */
+    #top-progress-bar { position: fixed; top: 0; left: 0; height: 4px; background: #FFD700; width: 0%; z-index: 9999; transition: width 0.3s ease; box-shadow: 0 0 10px #FFD700; }
+
+    /* Tabela Layout */
+    .table-container { flex: 1; overflow: auto; border: 1px solid #d1d5db; border-radius: 8px; background: white; position: relative; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin: 8px; }
+    table { border-collapse: separate; border-spacing: 0; width: 100%; table-layout: fixed; }
+    
+    /* Cabeçalho Fixo no Topo da Tabela */
+    thead { position: sticky; top: 0; z-index: 50; }
+    thead th { 
+      background-color: #FFD700 !important; color: #000 !important; 
+      font-size: 11px; padding: 8px 6px; 
+      border: 1px solid #cbd5e1; text-align: left; font-weight: 800;
+      white-space: normal; word-break: break-word; line-height: 1.2;
+      user-select: none; vertical-align: bottom; min-height: 50px;
+    }
+    
+    /* Hover Suave */
+    tbody tr { transition: filter 0.15s ease-in-out; }
+    tbody tr:hover { filter: brightness(0.92); cursor: pointer; }
+    
+    tbody td { 
+      background-color: #ffffff; font-size: 11px; padding: 6px 8px; 
+      border: 1px solid #e5e7eb; color: #374151;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      position: relative;
+    }
+
+    /* Célula em Edição (Inline) */
+    tbody td input, tbody td select {
+      color: #000 !important;
+      background-color: #fff !important;
+      width: 100%; height: 100%; border: 1px solid #3b82f6; padding: 2px; font-size: 11px; outline: none;
+      box-sizing: border-box;
+    }
+
+    /* Botão Salvar da Linha */
+    .btn-save-row {
+      display: none; position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+      background-color: #10b981; color: white; border: none; border-radius: 4px; 
+      width: 24px; height: 24px; cursor: pointer; z-index: 20;
+      align-items: center; justify-content: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .btn-save-row:hover { background-color: #059669; }
+    tr.row-editing .btn-save-row { display: flex; }
+    tr.row-editing td { background-color: #f0fdf4 !important; }
+
+    /* Resizer Arrastável */
+    .resizer { position: absolute; right: -3px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 60; background: transparent; }
+    .resizer:hover, .resizer.resizing { background: rgba(45, 50, 119, 0.5); }
+
+    /* Fundo Cores de Área do Operador (RESPONSABILIDADE) */
+    .bg-op-sc { background-color: #990000 !important; color: white !important; font-weight: bold; }
+    .bg-op-lm { background-color: #0b5394 !important; color: white !important; font-weight: bold; }
+    .bg-op-inv { background-color: #674ea7 !important; color: white !important; font-weight: bold; }
+    .bg-op-sist { background-color: #434343 !important; color: white !important; font-weight: bold; }
+
+    /* Cores de Inventário */
+    .cell-inv-amarelo { background-color: #fef08a !important; }
+    .cell-inv-verde { background-color: #bbf7d0 !important; }
+
+    /* Destaques do Auto Completar */
+    .cell-auto-filled-dark { color: #00FF00 !important; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-weight: 900; }
+    .cell-auto-filled-light { color: #1d4ed8 !important; background-color: #fef08a !important; font-weight: 900; border: 1px solid #facc15 !important; }
+
+    /* Destaque de Operador Selecionado */
+    .op-selecionado { border: 2px solid #3b82f6 !important; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3) !important; z-index: 10; position: relative;}
+
+    /* Filtros (Dropdown Flutuante) */
+    .dropdown-menu { display: none; position: fixed; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 9999; min-width: 220px; max-height: 300px; overflow-y: auto; padding: 8px; color: #333;}
+    .dropdown-menu.show { display: block; }
+    .dropdown-menu label { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 4px; cursor: pointer; border-radius: 4px;}
+    .dropdown-menu label:hover { background-color: #f3f4f6; }
+    .sort-btn { display: block; width: 100%; text-align: left; padding: 6px 8px; font-size: 11px; font-weight: bold; color: #2D3277; border-bottom: 1px solid #eee; margin-bottom: 4px;}
+    .sort-btn:hover { background-color: #f3f4f6; }
+    
+    /* Menu de Configuração de Colunas */
+    .col-menu { display: none; position: absolute; top: 100%; right: 0; background: white; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 1000; min-width: 250px; max-height: 400px; overflow-y: auto; padding: 8px; margin-top: 5px;}
+    .col-menu.show { display: block; }
+    .col-menu label { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px; cursor: pointer; border-radius: 4px;}
+    .col-menu label:hover { background-color: #f3f4f6; }
+    
+    /* Layout do Operador (Conforme mockup) */
+    .op-cell-content { display: flex; align-items: center; gap: 6px; width: 100%;}
+    .op-badges { display: flex; flex-direction: column; align-items: flex-end; line-height: 1; margin-right: 2px; flex-shrink: 0;}
+    .turno-badge { font-size: 9px; font-weight: 900; background: rgba(255,255,255,0.7); color: #000; padding: 1px 4px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.1);}
+    .id-badge { font-size: 8px; font-family: monospace; color: inherit; opacity: 0.9; margin-top: 2px; }
+    .op-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Classe para Ocultar Coluna */
+    .col-hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div id="top-progress-bar"></div>
+
+  <!-- Loading Overlay -->
+  <div id="ghost-truck-overlay">
+    <div class="ghost-truck-container">
+      <i class="fas fa-truck-moving ghost-truck-icon"></i>
+    </div>
+    <div class="progress-card">
+      <h2 class="text-2xl font-black text-[#2D3277] mb-1" id="loading-message">Iniciando...</h2>
+      <p class="text-sm text-gray-500 font-bold mb-6" id="loading-subtext">Preparando o ambiente</p>
+      
+      <div class="flex justify-between items-end mb-2">
+          <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Progresso</span>
+          <span class="text-3xl font-black text-[#FFD700]" id="loading-percent">0%</span>
+      </div>
+      <div class="w-full bg-gray-100 rounded-full h-4 overflow-hidden border border-gray-200 shadow-inner">
+        <div class="bg-gradient-to-r from-yellow-400 to-yellow-500 h-4 rounded-full transition-all duration-300 ease-out relative" id="loading-bar" style="width: 0%">
+            <div class="absolute inset-0 bg-white opacity-20 animate-pulse"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header Unificado -->
+  <div class="p-2 bg-white shadow-sm flex items-center justify-between border-b z-30 relative shrink-0 flex-wrap gap-2">
+    <div class="flex items-center gap-3">
+      <span class="text-xl text-teal-600"><i class="fas fa-table"></i></span>
+      <div>
+        <h1 class="text-md font-black text-[#2D3277] leading-tight">Análise Completa</h1>
+        <p class="text-[10px] text-gray-500 font-bold leading-tight" id="subtitle">Carregando...</p>
+      </div>
+    </div>
+    
+    <div id="resumo-topo" class="flex flex-wrap gap-1 text-[10px] max-w-2xl justify-center"></div>
+    
+    <div class="flex items-center gap-2">
+        <input type="text" id="search-global" placeholder="🔍 Pesquisar..." class="border p-1 rounded w-48 text-xs focus:outline-none focus:border-teal-500" oninput="aplicarFiltros()" title="Pesquisar em todas as colunas">
+        
+        <button onclick="abrirModalAdicionarOP()" title="Adicionar ou Editar um Operador no Banco de Usuários" class="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1.5 rounded text-xs font-bold shadow-sm transition flex items-center gap-1">
+            <i class="fas fa-user-plus"></i> Add OP
+        </button>
+        
+        <button onclick="abrirModalAutoCompletar()" title="Aplicar regras automáticas de preenchimento nas linhas" class="bg-green-600 hover:bg-green-700 text-white px-2 py-1.5 rounded text-xs font-bold shadow-sm transition flex items-center gap-1">
+            <i class="fas fa-magic"></i> Auto
+        </button>
+        
+        <button onclick="recarregarDados()" title="Sincronizar apenas os dados da aba atual (Rápido)" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1.5 rounded text-xs font-bold shadow-sm transition flex items-center gap-1">
+            <i class="fas fa-sync-alt"></i> Sync
+        </button>
+
+        <div style="position: relative;">
+            <button onclick="toggleMenuColunas(event)" title="Mostrar/Ocultar Colunas" class="bg-gray-100 text-gray-700 px-2 py-1.5 rounded text-xs font-bold border border-gray-300 hover:bg-gray-200 transition">
+                <i class="fas fa-columns"></i>
+            </button>
+            <div class="col-menu" id="menu-colunas"></div>
+        </div>
+
+        <button onclick="limparCache()" title="Limpar Cache Local e Recarregar Página" class="bg-red-50 text-red-600 px-2 py-1.5 rounded text-xs font-bold border border-red-200 hover:bg-red-100 transition"><i class="fas fa-trash"></i></button>
+    </div>
+  </div>
+
+  <div id="floating-dropdown" class="dropdown-menu"></div>
+
+  <!-- Tabela -->
+  <div class="table-container">
+    <table id="tabela">
+      <thead id="tabela-cabecalho"></thead>
+      <tbody id="tabela-corpo"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
+    let dadosOriginais = [];
+    let dadosFiltrados = [];
+    let colunas = [];
+    let filtrosAtivos = {}; 
+    let ordenacao = { coluna: null, direcao: 'asc' };
+    let colunasOcultas = new Set();
+    let activeDropdownCol = null;
+    let validacoes = {}; // Guardará os dropdowns nativos da planilha
+    
+    let COLS = {};
+    let opSelecionadoId = "";
+    let opSelecionadoNome = "";
+
+    function normalizeStr(str) {
+      if (!str) return "";
+      return String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+    }
+
+    async function callAPI(action, payload = {}) {
+      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+      return await res.json();
+    }
+
+    function limparCache() {
+      localStorage.clear();
+      sessionStorage.clear();
+      Swal.fire({ title: 'Limpando Cache...', text: 'A página será recarregada para puxar os dados mais recentes.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+      setTimeout(() => { window.location.reload(true); }, 1000);
+    }
+
+    // --- LÓGICA DA TELA DE CARREGAMENTO ---
+    let loadingInterval;
+    let currentProgress = 0;
+
+    function iniciarLoading(msg1, sub1) {
+      currentProgress = 0;
+      document.getElementById('ghost-truck-overlay').style.display = 'flex';
+      document.getElementById('loading-message').innerText = msg1;
+      document.getElementById('loading-subtext').innerText = sub1;
+      document.getElementById('loading-bar').style.width = '0%';
+      document.getElementById('loading-percent').innerText = '0%';
+      loadingInterval = setInterval(() => {
+        if (currentProgress < 30) {
+          currentProgress += Math.random() * 2; 
+          if(currentProgress > 30) currentProgress = 30;
+          document.getElementById('loading-bar').style.width = `${currentProgress}%`;
+          document.getElementById('loading-percent').innerText = `${Math.floor(currentProgress)}%`;
+          if(currentProgress > 15 && document.getElementById('loading-message').innerText === msg1) {
+              document.getElementById('loading-message').innerText = "Buscando dados no servidor...";
+              document.getElementById('loading-subtext').innerText = "Aguarde, isso pode levar alguns segundos.";
+          }
+        }
+      }, 200);
+    }
+
+    function atualizarLoading(percent, msg, sub) {
+      if (percent > currentProgress) {
+        currentProgress = percent;
+        document.getElementById('loading-bar').style.width = `${currentProgress}%`;
+        document.getElementById('loading-percent').innerText = `${Math.floor(currentProgress)}%`;
+      }
+      if (msg) document.getElementById('loading-message').innerText = msg;
+      if (sub) document.getElementById('loading-subtext').innerText = sub;
+    }
+
+    function pararLoading() {
+      clearInterval(loadingInterval);
+      atualizarLoading(100, 'Concluído!', 'Abrindo painel...');
+      setTimeout(() => { document.getElementById('ghost-truck-overlay').style.display = 'none'; }, 600);
+    }
+
+    async function iniciar() {
+      iniciarLoading('Conectando ao Banco', 'Validando acesso à planilha...');
+      document.getElementById('top-progress-bar').style.width = '20%';
+      
+      try {
+        const r = await callAPI('getDashboardInit');
+        if (r.erro) throw new Error(r.erro);
+        
+        atualizarLoading(35, 'Lendo Linhas', `Recebendo ${r.dadosCompletos.length} pacotes...`);
+        dadosOriginais = r.dadosCompletos || [];
+        validacoes = r.validacoes || {};
+        document.getElementById('subtitle').innerText = `Aba ${r.abaAtiva} • ${dadosOriginais.length} pacotes`;
+        
+        if(dadosOriginais.length > 0) {
+          colunas = Object.keys(dadosOriginais[0]).filter(c => !c.startsWith('_'));
+        }
+        
+        COLS = {
+            rota: colunas.find(c => normalizeStr(c) === 'rota'),
+            subs: colunas.find(c => normalizeStr(c).includes('subs')),
+            turnoUlt: colunas.find(c => normalizeStr(c).includes('turno1')),
+            turnoPen: colunas.find(c => normalizeStr(c).includes('turno2')),
+            turnoAnt: colunas.find(c => normalizeStr(c).includes('turno3')),
+            turno: colunas.find(c => normalizeStr(c) === 'turno'),
+            obs: colunas.find(c => normalizeStr(c).includes('observ')),
+            resp: colunas.find(c => normalizeStr(c).includes('responsa')),
+            desc: colunas.find(c => normalizeStr(c).includes('descri')),
+            valorReal: colunas.find(c => normalizeStr(c).includes('valoresreal') || normalizeStr(c).includes('valorreal')),
+            nomeUlt: colunas.find(c => normalizeStr(c).includes('ultima') && !normalizeStr(c).includes('penultima') && !normalizeStr(c).includes('tipenultima')),
+            nomePen: colunas.find(c => normalizeStr(c).includes('penultima') && !normalizeStr(c).includes('tipenultima')),
+            nomeAnt: colunas.find(c => normalizeStr(c).includes('tipenultima') || normalizeStr(c).includes('antepenultima'))
+        };
+
+        const colsOcultarDefault = ['turno1', 'turno2', 'turno3', 'id1', 'id2', 'id3'];
+        colunas.forEach(c => {
+           if (colsOcultarDefault.includes(normalizeStr(c))) colunasOcultas.add(c);
+        });
+
+        construirCabecalho();
+        gerarMenuColunas();
+        gerarResumoTopo();
+        
+        dadosFiltrados = [...dadosOriginais];
+        atualizarLoading(45, 'Processando Dados', 'Preparando tabela...');
+        await renderizarEmBlocos(dadosFiltrados, 45, 100);
+        
+        document.getElementById('top-progress-bar').style.width = '100%';
+        setTimeout(() => document.getElementById('top-progress-bar').style.opacity = '0', 500);
+        pararLoading();
+        
+      } catch(e) { 
+        pararLoading();
+        document.getElementById('top-progress-bar').style.width = '100%';
+        document.getElementById('top-progress-bar').style.backgroundColor = 'red';
+        Swal.fire('Erro', e.message, 'error'); 
+      }
+    }
+
+    // --- SYNC OTIMIZADO ---
+    async function recarregarDados() {
+        const abaAtual = document.getElementById('subtitle').innerText.split('•')[0].replace('Aba', '').trim();
+        if (!abaAtual) return Swal.fire('Erro', 'Aba atual não identificada.', 'error');
+
+        iniciarLoading('Sincronizando', `Buscando dados de ${abaAtual}...`);
+        
+        try {
+            const r = await callAPI('obterDadosLogisticos', { nomeAba: abaAtual });
+            if (r.erro) throw new Error(r.erro);
+            
+            dadosOriginais = r.dadosCompletos || [];
+            validacoes = r.validacoes || {};
+            document.getElementById('subtitle').innerText = `Aba ${abaAtual} • ${dadosOriginais.length} pacotes`;
+            
+            dadosFiltrados = [...dadosOriginais];
+            await renderizarEmBlocos(dadosFiltrados, 50, 100);
+            
+            pararLoading();
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+            Toast.fire({ icon: 'success', title: 'Dados Sincronizados!' });
+        } catch (e) {
+            pararLoading();
+            Swal.fire('Erro', e.message, 'error');
+        }
+    }
+
+    function gerarResumoTopo() {
+      const respCounts = {};
+      dadosOriginais.forEach(r => { 
+         let resp = r[COLS.resp] || 'N/A';
+         respCounts[resp] = (respCounts[resp] || 0) + 1;
+      });
+      
+      let html = `<span class="bg-gray-800 text-white px-2 py-0.5 rounded font-bold shadow-sm">Total: ${dadosOriginais.length}</span>`;
+      
+      html += Object.entries(respCounts).map(([resp, count]) => {
+         let colorClass = 'bg-gray-200 text-gray-700';
+         if(resp.includes('SERVICE')) colorClass = 'bg-[#990000] text-white';
+         else if(resp.includes('LAST')) colorClass = 'bg-[#0b5394] text-white';
+         else if(resp.includes('INVENT')) colorClass = 'bg-[#674ea7] text-white';
+         else if(resp.includes('N/A')) colorClass = 'bg-gray-400 text-white';
+         return `<span class="${colorClass} px-2 py-0.5 rounded font-bold shadow-sm">${resp}: ${count}</span>`;
+      }).join('');
+      
+      document.getElementById('resumo-topo').innerHTML = html;
+    }
+
+    function construirCabecalho() {
+      const thead = document.getElementById('tabela-cabecalho');
+      thead.innerHTML = '';
+      const tr = document.createElement('tr');
+      colunas.forEach(col => {
+        const th = document.createElement('th');
+        th.style.position = 'relative';
+        if (colunasOcultas.has(col)) th.classList.add('col-hidden');
+        
+        if (col.toLowerCase().includes('descri')) th.style.minWidth = '250px';
+        else if (col.toLowerCase().includes('observ')) th.style.minWidth = '150px';
+        else if (col.toLowerCase().includes('movimenta')) th.style.minWidth = '170px';
+        else th.style.minWidth = '100px';
+
+        th.innerHTML = `
+          <div class="flex justify-between items-start w-full gap-1">
+            <span>${col.replace(/_/g, ' ')}</span>
+            <button onclick="event.stopPropagation(); abrirFiltroFlutuante('${col}', this)" class="px-1 text-gray-600 hover:text-black hover:bg-yellow-500 rounded flex-shrink-0 mt-0.5"><i class="fas fa-filter"></i></button>
+          </div>
+        `;
+        const resizer = document.createElement('div');
+        resizer.className = 'resizer';
+        resizer.onmousedown = (e) => iniciarResize(e, th);
+        th.appendChild(resizer);
+        tr.appendChild(th);
+      });
+      
+      // Coluna invisível no cabeçalho, mas presente para alinhar as colunas
+      const thBtn = document.createElement('th');
+      thBtn.style.width = '40px';
+      thBtn.style.minWidth = '40px';
+      thBtn.style.maxWidth = '40px';
+      thBtn.style.padding = '0';
+      thBtn.style.border = '1px solid #cbd5e1';
+      thBtn.style.backgroundColor = '#FFD700'; // Para não ficar "fantasma"
+      tr.appendChild(thBtn);
+
+      thead.appendChild(tr);
+    }
+
+    function iniciarResize(e, th) {
+      e.preventDefault(); e.stopPropagation();
+      const startX = e.pageX; const startWidth = th.offsetWidth;
+      const resizer = th.querySelector('.resizer');
+      resizer.classList.add('resizing');
+      function onMouseMove(ev) {
+        const newWidth = startWidth + (ev.pageX - startX);
+        if (newWidth > 60) { th.style.width = newWidth + 'px'; th.style.minWidth = newWidth + 'px'; }
+      }
+      function onMouseUp() {
+        resizer.classList.remove('resizing');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    }
+
+    function toggleMenuColunas(e) {
+      e.stopPropagation();
+      document.getElementById('menu-colunas').classList.toggle('show');
+      document.getElementById('floating-dropdown').classList.remove('show');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.col-menu') && !e.target.closest('button')) document.getElementById('menu-colunas').classList.remove('show');
+      if (!e.target.closest('#floating-dropdown') && !e.target.closest('button')) { document.getElementById('floating-dropdown').classList.remove('show'); activeDropdownCol = null; }
+    });
+
+    function gerarMenuColunas() {
+      const menu = document.getElementById('menu-colunas');
+      menu.innerHTML = colunas.map(col => `
+        <label onclick="event.stopPropagation()">
+          <input type="checkbox" ${!colunasOcultas.has(col) ? 'checked' : ''} onchange="toggleColunaVisivel('${col}', this.checked)" class="accent-teal-600">
+          <span class="truncate">${col.replace(/_/g, ' ')}</span>
+        </label>
+      `).join('');
+    }
+
+    function toggleColunaVisivel(col, visivel) {
+      if (visivel) colunasOcultas.delete(col);
+      else colunasOcultas.add(col);
+      const index = colunas.indexOf(col) + 1;
+      document.querySelectorAll(`#tabela th:nth-child(${index}), #tabela td:nth-child(${index})`).forEach(el => {
+        el.classList.toggle('col-hidden', !visivel);
+      });
+    }
+
+    const floatingMenu = document.getElementById('floating-dropdown');
+    
+    function abrirFiltroFlutuante(col, btnElement) {
+      if (activeDropdownCol === col) { floatingMenu.classList.remove('show'); activeDropdownCol = null; return; }
+      activeDropdownCol = col;
+      const rect = btnElement.getBoundingClientRect();
+      floatingMenu.style.top = (rect.bottom + 5) + 'px';
+      floatingMenu.style.left = Math.max(10, rect.left - 150) + 'px';
+      const valoresUnicos = [...new Set(dadosOriginais.map(row => row[col]))].sort();
+      
+      let menuHtml = `
+        <div class="sort-btn" onclick="event.stopPropagation(); ordenarPor('${col}', 'asc'); fecharFiltro();">⬆️ Ordenar A-Z</div>
+        <div class="sort-btn" onclick="event.stopPropagation(); ordenarPor('${col}', 'desc'); fecharFiltro();">⬇️ Ordenar Z-A</div>
+        <hr class="my-1">
+        <div class="flex justify-between px-2 mb-2">
+           <button class="text-[10px] text-blue-600 font-bold hover:underline" onclick="event.stopPropagation(); selecionarTodos('${col}')">Todos</button>
+           <button class="text-[10px] text-red-600 font-bold hover:underline" onclick="event.stopPropagation(); limparFiltroColuna('${col}')">Limpar</button>
+        </div>
+      `;
+      menuHtml += valoresUnicos.map(val => {
+        const checked = filtrosAtivos[col] && filtrosAtivos[col].has(val) ? 'checked' : '';
+        return `<label onclick="event.stopPropagation()"><input type="checkbox" value="${val}" ${checked} onchange="atualizarFiltro('${col}', this.value, this.checked)" class="accent-teal-600"><span class="truncate" title="${val}">${val || '(Vazio)'}</span></label>`;
+      }).join('');
+      floatingMenu.innerHTML = menuHtml;
+      floatingMenu.classList.add('show');
+    }
+    
+    function fecharFiltro() { floatingMenu.classList.remove('show'); activeDropdownCol = null; }
+
+    function atualizarFiltro(col, val, checked) {
+      if (!filtrosAtivos[col]) filtrosAtivos[col] = new Set();
+      if (checked) filtrosAtivos[col].add(val);
+      else { filtrosAtivos[col].delete(val); if (filtrosAtivos[col].size === 0) delete filtrosAtivos[col]; }
+      aplicarFiltros();
+    }
+    function selecionarTodos(col) {
+      const vals = [...new Set(dadosOriginais.map(row => row[col]))];
+      filtrosAtivos[col] = new Set(vals);
+      document.querySelectorAll('#floating-dropdown input[type="checkbox"]').forEach(cb => cb.checked = true);
+      aplicarFiltros();
+    }
+    function limparFiltroColuna(col) {
+      delete filtrosAtivos[col];
+      document.querySelectorAll('#floating-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false);
+      aplicarFiltros();
+    }
+    function limparFiltros() {
+      filtrosAtivos = {}; ordenacao = { coluna: null, direcao: 'asc' };
+      document.getElementById('search-global').value = '';
+      aplicarFiltros(); fecharFiltro();
+    }
+
+    async function aplicarFiltros() {
+      const searchRaw = document.getElementById('search-global').value.trim();
+      const search = normalizeStr(searchRaw); // Normaliza a busca para ignorar acentos
+      
+      dadosFiltrados = dadosOriginais.filter(row => {
+        if (search) {
+          const match = Object.keys(row).some(k => !k.startsWith('_') && normalizeStr(row[k]).includes(search));
+          if (!match) return false;
+        }
+        for (const [col, vals] of Object.entries(filtrosAtivos)) {
+          if (!vals.has(row[col])) return false;
+        }
+        return true;
+      });
+      if (ordenacao.coluna) {
+        dadosFiltrados.sort((a, b) => {
+          const valA = a[ordenacao.coluna]; const valB = b[ordenacao.coluna];
+          const numA = parseFloat(String(valA).replace('R$', '').replace(/\./g, '').replace(',', '.'));
+          const numB = parseFloat(String(valB).replace('R$', '').replace(/\./g, '').replace(',', '.'));
+          if (!isNaN(numA) && !isNaN(numB) && String(valA).trim() !== '' && String(valB).trim() !== '') return ordenacao.direcao === 'asc' ? numA - numB : numB - numA;
+          return ordenacao.direcao === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        });
+      }
+      document.getElementById('tabela-corpo').innerHTML = ''; 
+      await renderizarEmBlocos(dadosFiltrados, 0, 100);
+    }
+
+    function ordenarPor(col, dir) { ordenacao.coluna = col; ordenacao.direcao = dir; aplicarFiltros(); }
+
+    // --- ADICIONAR OPERADOR ---
+    function selecionarOperador(event, id, nome) {
+        event.stopPropagation(); 
+        document.querySelectorAll('.op-selecionado').forEach(el => el.classList.remove('op-selecionado'));
+        let td = event.currentTarget;
+        td.classList.add('op-selecionado');
+        opSelecionadoId = id;
+        opSelecionadoNome = nome;
+    }
+
+    async function abrirModalAdicionarOP() {
+        let idPre = opSelecionadoId || '';
+        let nomePre = opSelecionadoNome || '';
+        let areaPre = '';
+        let turnoPre = '';
+        
+        if (idPre) {
+            Swal.fire({ title: 'Buscando operador...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+            try {
+                const res = await callAPI('obterDadosOperador', { id: idPre });
+                if (res.sucesso && res.dados) {
+                    nomePre = res.dados.nome || nomePre;
+                    areaPre = res.dados.area || '';
+                    turnoPre = res.dados.turno || '';
+                }
+            } catch(e) { console.warn("Não foi possível buscar dados prévios do operador."); }
+        }
+
+        const areas = validacoes['responsabilidade'] || [...new Set(dadosOriginais.map(r => r[COLS.resp]))].filter(Boolean).sort();
+        const turnos = validacoes['turno'] || [...new Set(dadosOriginais.map(r => r[COLS.turno]))].filter(Boolean).sort();
+
+        Swal.fire({
+            title: '<div class="text-lg font-black text-[#2D3277]"><i class="fas fa-user-plus mr-2"></i>Adicionar / Editar Operador</div>',
+            html: `
+                <div class="text-left space-y-3 p-2">
+                    <div><label class="text-xs font-bold text-gray-600 uppercase">ID</label>
+                        <input id="add-id" class="w-full border p-2 rounded focus:border-teal-500 outline-none" value="${idPre}">
+                    </div>
+                    <div><label class="text-xs font-bold text-gray-600 uppercase">Nome</label>
+                        <input id="add-nome" class="w-full border p-2 rounded focus:border-teal-500 outline-none" value="${nomePre}">
+                    </div>
+                    <div><label class="text-xs font-bold text-gray-600 uppercase">Área</label>
+                        <select id="add-area" class="w-full border p-2 rounded focus:border-teal-500 outline-none">
+                            <option value="">Selecione...</option>
+                            ${areas.map(a => `<option value="${a}" ${areaPre === a ? 'selected' : ''}>${a}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div><label class="text-xs font-bold text-gray-600 uppercase">Turno</label>
+                        <select id="add-turno" class="w-full border p-2 rounded focus:border-teal-500 outline-none">
+                            <option value="">Selecione...</option>
+                            ${turnos.map(t => `<option value="${t}" ${turnoPre === t ? 'selected' : ''}>${t}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-save"></i> Salvar no Banco',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#2D3277',
+            preConfirm: () => {
+                const id = document.getElementById('add-id').value.trim();
+                const nome = document.getElementById('add-nome').value.trim();
+                const area = document.getElementById('add-area').value;
+                const turno = document.getElementById('add-turno').value;
+                
+                if (!id || !nome || !area || !turno) {
+                    return Swal.showValidationMessage('Todos os campos são obrigatórios.');
+                }
+                return { id, nome, area, turno };
+            }
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                const dados = result.value;
+                Swal.fire({ title: 'Salvando...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+                try {
+                    const res = await callAPI('adicionarOperadorBanco', dados);
+                    if (res.erro) throw new Error(res.erro);
+                    
+                    opSelecionadoId = ""; opSelecionadoNome = "";
+                    document.querySelectorAll('.op-selecionado').forEach(el => el.classList.remove('op-selecionado'));
+
+                    Swal.fire('Sucesso!', res.mensagem, 'success');
+                } catch (e) { Swal.fire('Erro', e.message, 'error'); }
+            }
+        });
+    }
+
+    // --- AUTO COMPLETAR ---
+    function abrirModalAutoCompletar() {
+        if (!COLS.rota || !COLS.subs || !COLS.turnoUlt || !COLS.turno) {
+            return Swal.fire('Aviso', 'As colunas necessárias (Rota, Subs Status, Turno) não foram encontradas na planilha.', 'warning');
+        }
+        Swal.fire({
+            title: '🤖 Auto Completar',
+            html: `
+                <div class="text-left text-sm space-y-2">
+                    <p>Esta ação irá varrer a planilha e preencher automaticamente os campos vazios seguindo a regra:</p>
+                    <div class="bg-gray-100 p-3 rounded border border-gray-200 mt-2">
+                        <ul class="list-disc pl-4 space-y-1">
+                            <li>Se <b>ROTA</b> = <b>DC</b> e <b>SUBS STATUS</b> = <b>missing</b>.</li>
+                            <li>E se <b>Turno Ult/ OP</b> (ou <b>Penul/ OP</b> se o Ult estiver vazio) for = <b>DC</b>.</li>
+                        </ul>
+                        <p class="mt-2 font-bold text-green-700">Preencherá: TURNO = LAST | OBSERVAÇÕES = FALTANTE EM ROTA/DC | RESPONSABILIDADE = LAST MILE</p>
+                    </div>
+                </div>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-magic"></i> Executar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#2D3277'
+        }).then(async (result) => {
+            if(result.isConfirmed) { executarAutoPreenchimento(); }
+        });
+    }
+
+    async function executarAutoPreenchimento() {
+        iniciarLoading('Aplicando Regras', 'Verificando condições...');
+        let count = 0; let updates = [];
+        atualizarLoading(20, 'Aplicando Regras', 'Lendo dados locais...');
+
+        dadosOriginais.forEach(row => {
+            let valRota = normalizeStr(row[COLS.rota]);
+            let valSubs = normalizeStr(row[COLS.subs]);
+            if (valRota === 'dc' && valSubs === 'missing') {
+                let turnoOp = row[COLS.turnoUlt];
+                if (!turnoOp || String(turnoOp).trim() === '') turnoOp = row[COLS.turnoPen];
+                if (normalizeStr(turnoOp) === 'dc') {
+                    let novoTurno = 'LAST'; let novaObs = 'FALTANTE EM ROTA/DC'; let novaResp = 'LAST MILE';
+                    if (row[COLS.turno] !== novoTurno || row[COLS.obs] !== novaObs || row[COLS.resp] !== novaResp) {
+                        row[COLS.turno] = novoTurno; row[COLS.obs] = novaObs; row[COLS.resp] = novaResp; row._autoFilled = true; 
+                        updates.push({ id: row['_idNum'], coluna: COLS.turno, valor: novoTurno });
+                        updates.push({ id: row['_idNum'], coluna: COLS.obs, valor: novaObs });
+                        updates.push({ id: row['_idNum'], coluna: COLS.resp, valor: novaResp });
+                        count++;
+                    }
+                }
+            }
+        });
+
+        if (updates.length === 0) {
+            pararLoading();
+            return Swal.fire('Tudo Certo!', 'Nenhuma linha se encaixou na regra ou todas já estavam preenchidas.', 'info');
+        }
+
+        atualizarLoading(40, 'Salvando', `Enviando ${updates.length} alterações para a planilha...`);
+        const nomeAba = document.getElementById('subtitle').innerText.split('•')[0].replace('Aba', '').trim();
+        
+        try {
+            const res = await callAPI('salvarLoteAnalise', { updates: updates, nomeAba: nomeAba });
+            if(res.erro) throw new Error(res.erro);
+            
+            // Aplica os filtros novamente (pois as linhas mudaram de valor)
+            await aplicarFiltros();
+            pararLoading();
+            Swal.fire({ title: '✅ Concluído!', text: `${count} linhas foram preenchidas e salvas.`, icon: 'success', confirmButtonColor: '#27ae60' });
+        } catch(e) {
+            pararLoading(); Swal.fire('Erro ao Salvar', e.message, 'error');
+        }
+    }
+
+    // --- RENDERIZAÇÃO ASSÍNCRONA ---
+    async function renderizarEmBlocos(dadosArray, startPct = 0, endPct = 100) {
+      const tbody = document.getElementById('tabela-corpo');
+      const total = dadosArray.length;
+      const chunkSize = 100;
+      let index = 0;
+
+      if (tbody.innerHTML === '') tbody.innerHTML = '';
+
+      return new Promise(resolve => {
+        function processChunk() {
+          if (index >= total) { 
+              atualizarLoading(endPct, 'Quase lá...', 'Finalizando...');
+              resolve(); return; 
+          }
+
+          const limit = Math.min(index + chunkSize, total);
+          let html = '';
+          
+          for (let i = index; i < limit; i++) {
+            const row = dadosArray[i];
+            html += `<tr data-id="${row['_idNum']}">`;
+            
+            colunas.forEach(col => {
+              const isOculta = colunasOcultas.has(col) ? 'col-hidden' : '';
+              let val = row[col] !== undefined ? row[col] : '-';
+              let innerHtml = `<span class="truncate block" title="${val}">${val}</span>`;
+              let extraClasses = '';
+              let styleAttr = ''; 
+              
+              if (col.toLowerCase().includes('valores') || col.toLowerCase().includes('valor')) {
+                let num = parseFloat(String(val).replace('R$', '').replace(/\./g, '').replace(',', '.').trim());
+                if(!isNaN(num)) innerHtml = `<span class="truncate block" title="${val}">R$ ${num.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`;
+              }
+              
+              if (col === COLS.nomeUlt || col === COLS.nomePen || col === COLS.nomeAnt) {
+                 let isUlt = (col === COLS.nomeUlt);
+                 let isPen = (col === COLS.nomePen);
+                 let isAnt = (col === COLS.nomeAnt);
+                 let turno = isUlt ? row['_turnoUlt'] : isPen ? row['_turnoPen'] : row['_turnoAnt'];
+                 let opId = isUlt ? row['_idUlt'] : isPen ? row['_idPen'] : row['_idAnt'];
+                 let bgColor = isUlt ? row['_bgUlt'] : isPen ? row['_bgPen'] : row['_bgAnt'];
+                 let fgColor = isUlt ? row['_fgUlt'] : isPen ? row['_fgPen'] : row['_fgAnt'];
+                 
+                 if (bgColor) styleAttr = `style="background-color: ${bgColor} !important; color: ${fgColor} !important;"`;
+                 
+                 innerHtml = `
+                   <div class="op-cell-content">
+                     <div class="op-badges">
+                       <span class="turno-badge" style="color: #000;">${turno || '--'}</span>
+                       <span class="id-badge">${opId || '--'}</span>
+                     </div>
+                     <span class="op-name" title="${val}">${val}</span>
+                   </div>
+                 `;
+                 
+                 let nomeEscapado = String(val).replace(/'/g, "\\'");
+                 html += `<td class="${isOculta} ${extraClasses}" ${styleAttr} onclick="selecionarOperador(event, '${opId}', '${nomeEscapado}')">${innerHtml}</td>`;
+                 return; 
+              }
+
+              if (col === COLS.obs) {
+                  let bgObs = row['_bgObs'];
+                  let fgObs = row['_fgObs'];
+                  if (bgObs) styleAttr = `style="background-color: ${bgObs} !important; color: ${fgObs} !important;"`;
+              }
+
+              if (col.toLowerCase().includes('inventariado') && !styleAttr) {
+                 if(String(val).toLowerCase().includes('ñ entrou') || String(val).toLowerCase().includes('n entrou')) extraClasses += ' cell-inv-amarelo';
+                 else if(String(val).toLowerCase().includes('pendente') || String(val).toLowerCase().includes('verificados')) extraClasses += ' cell-inv-verde';
+              }
+              
+              if (col === COLS.resp && !styleAttr) {
+                 if(String(val).includes('SERVICE')) extraClasses += ' bg-op-sc';
+                 else if(String(val).includes('LAST')) extraClasses += ' bg-op-lm';
+                 else if(String(val).includes('INVENTARIO') || String(val).includes('INVENTÁRIO')) extraClasses += ' bg-op-inv';
+              }
+
+              if (row._autoFilled && (col === COLS.turno || col === COLS.obs || col === COLS.resp)) {
+                  if (col === COLS.resp) extraClasses += ' cell-auto-filled-dark';
+                  else extraClasses += ' cell-auto-filled-light';
+              }
+
+              let isEditable = (col === COLS.turno || col === COLS.resp || col === COLS.obs || col === COLS.desc || col === COLS.valorReal);
+              let dblAttr = isEditable ? `ondblclick="tornarEditavel(this, '${row['_idNum']}', '${col}')"` : '';
+
+              html += `<td class="${isOculta} ${extraClasses}" ${styleAttr} ${dblAttr}>${innerHtml}</td>`;
+            });
+            
+            html += `<td style="width: 40px; max-width: 40px; padding: 0;"><button class="btn-save-row" onclick="salvarLinha(this, '${row['_idNum']}')" title="Salvar Linha"><i class="fas fa-save"></i></button></td>`;
+            
+            html += `</tr>`;
+          }
+          
+          tbody.insertAdjacentHTML('beforeend', html);
+          index = limit;
+          
+          const localPct = (index / total);
+          const globalPct = startPct + (localPct * (endPct - startPct));
+          atualizarLoading(globalPct, 'Lendo linhas', `${index} de ${total} pacotes lidos...`);
+          document.getElementById('top-progress-bar').style.width = `${globalPct}%`;
+
+          requestAnimationFrame(processChunk);
+        }
+        
+        if (total === 0) {
+          tbody.innerHTML = '<tr><td colspan="100" class="text-center p-4 text-gray-500 font-bold">Nenhum resultado encontrado.</td></tr>';
+          resolve();
+        } else {
+          processChunk();
+        }
+      });
+    }
+
+    // --- EDIÇÃO INLINE COM BOTÃO POR LINHA ---
+    function tornarEditavel(td, id, col) {
+        if (td.querySelector('input') || td.querySelector('select')) return; 
+        
+        const row = dadosOriginais.find(r => r['_idNum'] === id);
+        if (!row) return;
+        
+        let val = row[col] || '';
+        const tr = td.parentElement;
+        
+        tr.classList.add('row-editing');
+        
+        const isSelect = (col === COLS.turno || col === COLS.resp || col === COLS.obs);
+        
+        if (isSelect) {
+            let opcoes = [];
+            let valKey = '';
+            if (col === COLS.turno) valKey = 'turno';
+            else if (col === COLS.resp) valKey = 'responsabilidade';
+            else if (col === COLS.obs) valKey = 'observacoes';
+
+            // Prioriza a lista de validação original da planilha
+            if (valKey && validacoes[valKey] && validacoes[valKey].length > 0) {
+                opcoes = validacoes[valKey];
+            } else {
+                if (col === COLS.turno) opcoes = [...new Set(dadosOriginais.map(r => r[COLS.turno]))].filter(Boolean).sort();
+                if (col === COLS.resp) opcoes = [...new Set(dadosOriginais.map(r => r[COLS.resp]))].filter(Boolean).sort();
+                if (col === COLS.obs) opcoes = [...new Set(dadosOriginais.map(r => r[COLS.obs]))].filter(Boolean).sort();
+            }
+            
+            // Garante que o valor atual esteja na lista, caso não esteja na validação da planilha
+            if (val && !opcoes.includes(val)) opcoes.push(val);
+
+            let html = `<select data-col="${col}" onkeydown="if(event.key==='Enter') this.blur();">`;
+            html += `<option value="">(Vazio)</option>`;
+            opcoes.forEach(o => { html += `<option value="${o}" ${val === o ? 'selected' : ''}>${o}</option>`; });
+            html += `</select>`;
+            td.innerHTML = html;
+            td.querySelector('select').focus();
+        } else {
+            // Limpa o R$ para facilitar a edição de valores
+            let rawVal = val;
+            if (col === COLS.valorReal) {
+                rawVal = String(val).replace('R$', '').trim(); 
+            }
+            
+            let html = `<input type="text" data-col="${col}" value="${String(rawVal).replace(/"/g, '&quot;')}" onkeydown="if(event.key==='Enter') this.blur();">`;
+            td.innerHTML = html;
+            let inputEl = td.querySelector('input');
+            inputEl.focus();
+            inputEl.select();
+        }
+    }
+
+    async function salvarLinha(btn, id) {
+        const tr = btn.closest('tr');
+        const inputs = tr.querySelectorAll('input[data-col], select[data-col]');
+        
+        if (inputs.length === 0) {
+            tr.classList.remove('row-editing');
+            return;
+        }
+
+        const updates = [];
+        const row = dadosOriginais.find(r => r['_idNum'] === id);
+        const backups = []; // Para rollback em caso de erro
+
+        inputs.forEach(input => {
+            const col = input.getAttribute('data-col');
+            const newVal = input.value;
+            const oldVal = row[col] || '';
+            
+            if (newVal !== String(oldVal)) {
+                backups.push({ td: input.parentElement, html: input.parentElement.getAttribute('data-old-html') || input.parentElement.innerHTML });
+                updates.push({ id: id, coluna: col, valor: newVal });
+                row[col] = newVal; 
+            }
+        });
+
+        inputs.forEach(input => {
+            const col = input.getAttribute('data-col');
+            const newVal = input.value;
+            const td = input.parentElement;
+            
+            let innerHtml = `<span class="truncate block">${newVal}</span>`;
+            if (col.toLowerCase().includes('valores') || col.toLowerCase().includes('valor')) {
+                let num = parseFloat(String(newVal).replace('R$', '').replace(/\./g, '').replace(',', '.').trim());
+                if(!isNaN(num)) innerHtml = `<span class="truncate block">R$ ${num.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`;
+            }
+            td.innerHTML = innerHtml;
+            
+            if (col === COLS.resp) {
+                td.classList.remove('bg-op-sc', 'bg-op-lm', 'bg-op-inv', 'bg-op-sist');
+                td.style.backgroundColor = ''; 
+                if(String(newVal).includes('SERVICE')) td.classList.add('bg-op-sc');
+                else if(String(newVal).includes('LAST')) td.classList.add('bg-op-lm');
+                else if(String(newVal).includes('INVENTARIO') || String(newVal).includes('INVENTÁRIO')) td.classList.add('bg-op-inv');
+            }
+        });
+
+        tr.classList.remove('row-editing');
+
+        if (updates.length === 0) return; 
+
+        const currentAba = document.getElementById('subtitle').innerText.split('•')[0].replace('Aba', '').trim();
+        
+        try {
+            const res = await callAPI('salvarLoteAnalise', { updates: updates, nomeAba: currentAba });
+            if(res.erro) throw new Error(res.erro);
+            
+            tr.style.transition = 'background-color 0.5s';
+            tr.style.backgroundColor = '#d1fae5';
+            setTimeout(() => tr.style.backgroundColor = '', 1000);
+            
+        } catch (e) {
+            console.error("Erro ao salvar linha:", e);
+            // Rollback
+            backups.forEach(bk => { bk.td.innerHTML = bk.html; });
+            Swal.fire('Erro', 'Não foi possível salvar as alterações. A linha foi restaurada.', 'error');
+        }
+    }
+
+    window.onload = iniciar;
+  </script>
+</body>
+</html>

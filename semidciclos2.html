@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel de Controle</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    :root {
+      --azul-escuro: #2D3277;
+      --amarelo: #FFD700;
+      --fundo-cinza: #f4f6f9;
+    }
+    body {
+      background-color: var(--fundo-cinza);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .card-menu {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      border: 1px solid #e5e7eb;
+    }
+    .card-menu:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+      border-color: var(--azul-escuro);
+    }
+    .card-menu i { font-size: 2.5rem; color: var(--azul-escuro); }
+    .card-menu .titulo { font-weight: 700; color: var(--azul-escuro); font-size: 1.1rem; }
+    .card-menu .subtitulo { color: #6b7280; font-size: 0.9rem; }
+    #loader-global {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      display: none; align-items: center; justify-content: center; z-index: 9999;
+    }
+    #loader-global .spinner {
+      border: 8px solid #f3f3f3; border-top: 8px solid var(--amarelo);
+      border-radius: 50%; width: 60px; height: 60px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .tabela-container { max-height: 500px; overflow-y: auto; }
+    .tabela-container thead th { position: sticky; top: 0; background: var(--azul-escuro); color: white; z-index: 10; }
+    .status-pendente { background-color: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; }
+    .status-concluido { background-color: #d1fae5; color: #065f46; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; }
+    .status-cancelado { background-color: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; }
+  </style>
+</head>
+<body class="p-4 md:p-6">
+
+  <!-- BARRA DE AÇÕES SUPERIOR -->
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-6 bg-white p-3 rounded-lg shadow">
+    <div class="flex items-center gap-2">
+      <button onclick="abrirTela('screen-home')" class="bg-[#2D3277] text-white px-4 py-2 rounded-lg hover:bg-[#1e235c] transition">
+        <i class="fas fa-home mr-1"></i> Início
+      </button>
+      <a href="https://docs.google.com/spreadsheets/d/1bj4sKiNoz7ZF2GQ_djXiF6s-9ofhHWH2e--laNrsLzA/edit" target="_blank" class="bg-[#FFD700] text-[#2D3277] px-4 py-2 rounded-lg font-semibold hover:bg-yellow-400 transition">
+        <i class="fas fa-table mr-1"></i> Planilha
+      </a>
+      <button onclick="location.reload()" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 transition">
+        <i class="fas fa-sync-alt mr-1"></i> Atualizar
+      </button>
+    </div>
+    <h1 class="text-xl font-bold text-[#2D3277]">Painel de Controle</h1>
+  </div>
+
+  <!-- LOADER GLOBAL -->
+  <div id="loader-global">
+    <div class="spinner"></div>
+    <p class="text-white ml-4 text-lg">Processando...</p>
+  </div>
+
+  <!-- TELA: HOME (MENU) -->
+  <div id="screen-home" class="screen active">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div class="card-menu" onclick="abrirTela('screen-listar')">
+        <i class="fas fa-list"></i>
+        <div class="titulo mt-2">Listar Dados</div>
+        <div class="subtitulo">Visualizar todos os registros</div>
+      </div>
+      <div class="card-menu" onclick="abrirTela('screen-cadastrar')">
+        <i class="fas fa-plus-circle"></i>
+        <div class="titulo mt-2">Cadastrar Item</div>
+        <div class="subtitulo">Adicionar novo registro</div>
+      </div>
+      <div class="card-menu" onclick="carregarAbas()">
+        <i class="fas fa-info-circle"></i>
+        <div class="titulo mt-2">Informações da Planilha</div>
+        <div class="subtitulo">Listar abas disponíveis</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELA: LISTAR DADOS -->
+  <div id="screen-listar" class="screen">
+    <h2 class="text-2xl font-bold text-[#2D3277] mb-4">Listar Dados</h2>
+    <div class="flex gap-2 mb-4">
+      <input type="text" id="filtro-listar" placeholder="Filtrar por nome..." class="border p-2 rounded w-full max-w-md">
+      <button onclick="filtrarTabela()" class="bg-[#2D3277] text-white px-4 py-2 rounded">Filtrar</button>
+    </div>
+    <div class="tabela-container bg-white rounded-lg shadow">
+      <table class="min-w-full text-sm">
+        <thead class="bg-[#2D3277] text-white">
+          <tr>
+            <th class="p-3 text-left">ID</th>
+            <th class="p-3 text-left">Nome</th>
+            <th class="p-3 text-left">Descrição</th>
+            <th class="p-3 text-left">Valor</th>
+            <th class="p-3 text-left">Status</th>
+            <th class="p-3 text-left">Data</th>
+            <th class="p-3 text-left">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="corpo-tabela">
+          <tr><td colspan="7" class="p-4 text-center text-gray-500">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TELA: CADASTRAR ITEM -->
+  <div id="screen-cadastrar" class="screen">
+    <h2 class="text-2xl font-bold text-[#2D3277] mb-4">Cadastrar Item</h2>
+    <form id="form-cadastrar" class="bg-white p-6 rounded-lg shadow max-w-lg">
+      <div class="mb-4">
+        <label class="block font-semibold mb-1">ID</label>
+        <input type="text" id="campo-id" required class="border p-2 rounded w-full">
+      </div>
+      <div class="mb-4">
+        <label class="block font-semibold mb-1">Nome</label>
+        <input type="text" id="campo-nome" required class="border p-2 rounded w-full">
+      </div>
+      <div class="mb-4">
+        <label class="block font-semibold mb-1">Descrição</label>
+        <textarea id="campo-descricao" class="border p-2 rounded w-full"></textarea>
+      </div>
+      <div class="mb-4">
+        <label class="block font-semibold mb-1">Valor</label>
+        <input type="text" id="campo-valor" class="border p-2 rounded w-full">
+      </div>
+      <div class="mb-4">
+        <label class="block font-semibold mb-1">Status</label>
+        <select id="campo-status" class="border p-2 rounded w-full">
+          <option value="PENDENTE">PENDENTE</option>
+          <option value="CONCLUÍDO">CONCLUÍDO</option>
+          <option value="CANCELADO">CANCELADO</option>
+        </select>
+      </div>
+      <div class="mb-4">
+        <label class="block font-semibold mb-1">Data</label>
+        <input type="date" id="campo-data" class="border p-2 rounded w-full">
+      </div>
+      <button type="submit" class="bg-[#FFD700] text-[#2D3277] font-bold px-6 py-2 rounded hover:bg-yellow-400 transition">
+        Salvar
+      </button>
+    </form>
+  </div>
+
+  <script>
+    // ==========================================
+    // CONFIGURAÇÃO DA API
+    // ==========================================
+    const API_URL = 'https://script.google.com/macros/s/SEU_DEPLOY_ID/exec'; // Substitua após o deploy
+
+    // ==========================================
+    // FUNÇÃO GLOBAL DE CHAMADA À API
+    // ==========================================
+    async function callAPI(action, payload = {}) {
+      const loader = document.getElementById('loader-global');
+      loader.style.display = 'flex';
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action, payload })
+        });
+        const data = await response.json();
+        if (data.erro) throw new Error(data.erro);
+        return data;
+      } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Erro', text: err.message });
+        throw err;
+      } finally {
+        loader.style.display = 'none';
+      }
+    }
+
+    // ==========================================
+    // NAVEGAÇÃO SPA
+    // ==========================================
+    function abrirTela(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    // ==========================================
+    // CARREGAR DADOS (LISTAGEM)
+    // ==========================================
+    async function carregarDados() {
+      const resp = await callAPI('lerDados');
+      const tbody = document.getElementById('corpo-tabela');
+      tbody.innerHTML = '';
+
+      if (!resp.dados || resp.dados.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-gray-500">Nenhum registro encontrado.</td></tr>';
+        return;
+      }
+
+      resp.dados.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b hover:bg-gray-50';
+        const statusClass = item.Status === 'CONCLUÍDO' ? 'status-concluido' : item.Status === 'CANCELADO' ? 'status-cancelado' : 'status-pendente';
+        tr.innerHTML = `
+          <td class="p-3">${item.ID || '-'}</td>
+          <td class="p-3">${item.Nome || '-'}</td>
+          <td class="p-3">${item.Descrição || '-'}</td>
+          <td class="p-3">${item.Valor || '-'}</td>
+          <td class="p-3"><span class="${statusClass}">${item.Status || '-'}</span></td>
+          <td class="p-3">${item.Data || '-'}</td>
+          <td class="p-3">
+            <button onclick="excluirRegistro('${item.ID}')" class="text-red-600 hover:text-red-800">
+              <i class="fas fa-trash"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ==========================================
+    // FILTRO SIMPLES
+    // ==========================================
+    function filtrarTabela() {
+      const filtro = document.getElementById('filtro-listar').value.toLowerCase();
+      const linhas = document.querySelectorAll('#corpo-tabela tr');
+      linhas.forEach(linha => {
+        const texto = linha.textContent.toLowerCase();
+        linha.style.display = texto.includes(filtro) ? '' : 'none';
+      });
+    }
+
+    // ==========================================
+    // SALVAR NOVO ITEM
+    // ==========================================
+    document.getElementById('form-cadastrar').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        ID: document.getElementById('campo-id').value,
+        Nome: document.getElementById('campo-nome').value,
+        Descrição: document.getElementById('campo-descricao').value,
+        Valor: document.getElementById('campo-valor').value,
+        Status: document.getElementById('campo-status').value,
+        Data: document.getElementById('campo-data').value
+      };
+      const resp = await callAPI('salvarItem', payload);
+      if (resp.sucesso) {
+        Swal.fire({ icon: 'success', title: 'Sucesso', text: resp.mensagem });
+        document.getElementById('form-cadastrar').reset();
+        abrirTela('screen-listar');
+        carregarDados();
+      }
+    });
+
+    // ==========================================
+    // EXCLUIR ITEM
+    // ==========================================
+    async function excluirRegistro(id) {
+      const confirm = await Swal.fire({
+        title: 'Tem certeza?',
+        text: 'Deseja excluir o registro ' + id + '?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, excluir',
+        cancelButtonText: 'Cancelar'
+      });
+      if (confirm.isConfirmed) {
+        const resp = await callAPI('excluirItem', { ID: id });
+        if (resp.sucesso) {
+          Swal.fire({ icon: 'success', title: 'Excluído', text: resp.mensagem });
+          carregarDados();
+        }
+      }
+    }
+
+    // ==========================================
+    // LISTAR ABAS (INFO)
+    // ==========================================
+    async function carregarAbas() {
+      const resp = await callAPI('listarAbas');
+      if (resp.sucesso) {
+        Swal.fire({
+          title: 'Abas da Planilha',
+          html: resp.abas.map(a => `<li>${a}</li>`).join(''),
+          icon: 'info'
+        });
+      }
+    }
+
+    // ==========================================
+    // INICIALIZAÇÃO
+    // ==========================================
+    // Ao abrir a tela de listagem, carrega os dados
+    const observer = new MutationObserver(() => {
+      if (document.getElementById('screen-listar').classList.contains('active')) {
+        carregarDados();
+      }
+    });
+    observer.observe(document.getElementById('screen-listar'), { attributes: true, attributeFilter: ['class'] });
+
+  </script>
+</body>
+</html>

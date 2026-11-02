@@ -1,0 +1,98 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Limpar dados do Portal</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;display:grid;place-items:center;
+  padding:20px;background:#171c2b;
+  font-family:Segoe UI,Arial,sans-serif;color:#20283b
+}
+main{
+  width:min(100%,430px);padding:30px;background:white;
+  border-radius:18px;box-shadow:0 20px 60px #0005
+}
+h1{font-size:24px;margin:0 0 12px}
+p{font-size:14px;line-height:1.6;color:#65718a}
+button{
+  width:100%;padding:15px;border:0;border-radius:10px;
+  background:#ffe600;color:#171c2b;font-weight:800;
+  cursor:pointer;font-size:14px
+}
+button:disabled{opacity:.6}
+#status{margin-top:15px;font-size:13px;line-height:1.5}
+</style>
+</head>
+<body>
+<main>
+  <h1>Limpar dados do portal</h1>
+  <p>
+    Esta ferramenta desconecta sua conta e limpa os dados
+    locais acessíveis deste site neste navegador.
+    Não apaga informações da planilha.
+  </p>
+  <button id="limpar">Limpar dados deste site</button>
+  <div id="status" role="status"></div>
+</main>
+<script>
+document.getElementById("limpar").onclick = async function(){
+  if(!confirm(
+    "Deseja apagar os dados locais deste site? Você será desconectado."
+  )) return;
+
+  const botao = this;
+  const status = document.getElementById("status");
+  botao.disabled = true;
+  botao.textContent = "Limpando dados...";
+
+  const erros = [];
+
+  try { localStorage.clear(); }
+  catch(e) { erros.push("armazenamento local"); }
+
+  try { sessionStorage.clear(); }
+  catch(e) { erros.push("sessão do navegador"); }
+
+  try {
+    if ("caches" in window) {
+      const chaves = await caches.keys();
+      await Promise.all(chaves.map(chave => caches.delete(chave)));
+    }
+  } catch(e) { erros.push("Cache Storage"); }
+
+  try {
+    if ("indexedDB" in window && indexedDB.databases) {
+      const bancos = await indexedDB.databases();
+      await Promise.all(bancos.filter(b => b.name).map(banco =>
+        new Promise(resolve => {
+          const req = indexedDB.deleteDatabase(banco.name);
+          req.onsuccess = req.onerror = req.onblocked = resolve;
+        })
+      ));
+    }
+  } catch(e) { erros.push("IndexedDB"); }
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const registros =
+        await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registros.map(r => r.unregister()));
+    }
+  } catch(e) { erros.push("Service Workers"); }
+
+  status.textContent = erros.length
+    ? "Limpeza parcial. Alguns dados não puderam ser removidos: " +
+      erros.join(", ") + "."
+    : "Dados locais acessíveis removidos. Redirecionando para o login...";
+
+  setTimeout(() => {
+    location.replace("login.html?limpeza=" + Date.now());
+  }, 1200);
+};
+</script>
+</body>
+</html>

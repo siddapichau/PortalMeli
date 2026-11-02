@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Controle — Missorted</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    :root { --azul: #2D3277; --amarelo: #FFD700; --fundo: #f4f6f9; }
+    body { background-color: var(--fundo); font-family: system-ui, -apple-system, sans-serif; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    
+    #loader-overlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,0.9);
+      display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;
+    }
+    #loader-overlay.show { display: flex; }
+    .spinner { width: 48px; height: 48px; border: 5px solid #e5e7eb; border-top-color: var(--azul); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .card-menu { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; transition: transform .2s; border: 1px solid #e5e7eb; display: flex; flex-direction: column; justify-content: center; }
+    .card-menu:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); border-color: #2D3277; }
+    
+    .kpi-card { background:#fff; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.1); border-left:4px solid var(--amarelo); }
+    .kpi-title { font-size:12px; color:#666; text-transform:uppercase; font-weight:bold; margin-bottom:6px; }
+    .val-dolar-lg { font-size: 24px; font-weight: 900; color: #111; line-height: 1.1; }
+    .val-real-sm { font-size: 12px; font-weight: 700; color: #888; }
+
+    .table-container { max-height: 280px; overflow-y: auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { padding:8px 12px; text-align:left; border-bottom:1px solid #eee; }
+    th { background:#f8f9fa; position:sticky; top:0; color:#555; }
+    .id-badge { background:#e8eaed; padding:2px 6px; border-radius:4px; font-family:monospace; }
+
+    /* ESTILOS PARA O RELATÓRIO DE E-MAIL */
+    .report-main-title { color: var(--azul); margin-bottom: 20px; text-align: center; font-weight: 900; text-transform: uppercase; }
+    .report-box { padding: 20px; border-radius: 8px; border: 2px solid #ddd; margin-bottom: 20px; }
+    .report-box.success { background-color: #f0fdf4; border-color: #86efac; }
+    .report-box.warning { background-color: #fffbeb; border-color: #fcd34d; }
+    .report-header { font-size: 18px; font-weight: bold; color: #111; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+    .report-stats { display: flex; gap: 30px; margin-bottom: 15px; align-items: center; }
+    .stat-item { font-size: 14px; color: #333; }
+    .stat-item strong { font-size: 16px; color: #111; }
+    
+    .badge-container { display: flex; flex-wrap: wrap; gap: 8px; }
+    
+    /* CORREÇÃO DA CENTRALIZAÇÃO DOS CÍRCULOS */
+    .badge { 
+      padding: 8px 12px; 
+      border-radius: 6px; 
+      font-weight: bold; 
+      font-size: 13px; 
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+      color: white; 
+      display: inline-flex; 
+      align-items: center; 
+      justify-content: center;
+      text-align: center;
+      min-width: 60px;
+    }
+    .badge.green { background-color: #10b981; }
+    .badge.orange { background-color: #f59e0b; }
+
+    /* Trava de Exportação do Dashboard */
+    body.exporting-mode #capture-area { position: absolute !important; top: 0 !important; left: 0 !important; width: 1200px !important; height: auto !important; padding: 20px !important; background: #f4f6f9 !important; z-index: 99999 !important; }
+    body.exporting-mode .no-export { display: none !important; }
+
+    /* Trava de Exportação do Relatório de Email */
+    body.exporting-mode-report #capture-area-report { width: 1200px !important; height: auto !important; padding: 40px !important; background: #f4f6f9 !important; position: absolute !important; top:0; left:0; z-index: 99999; }
+  </style>
+</head>
+<body class="p-4 min-w-[900px]">
+
+  <div id="loader-overlay" class="no-export">
+    <div class="spinner"></div>
+    <p class="mt-4 font-bold text-[#2D3277]">Processando...</p>
+  </div>
+
+  <!-- Barra Superior -->
+  <header class="bg-white rounded-lg shadow p-3 flex justify-between items-center mb-6 border-t-4 border-[#FFD700] no-export">
+    <div class="flex items-center gap-3">
+      <button onclick="abrirTela('screen-menu')" class="text-[#2D3277] font-bold text-lg hover:opacity-80">
+        <i class="fa-solid fa-house mr-1"></i> Início
+      </button>
+      <span class="text-gray-300">|</span>
+      <a href="https://docs.google.com/spreadsheets/d/1JhRccf0s3TyYolY-iI7E0M5MvAsd692gERKfXeG7upI/edit" target="_blank" class="text-sm text-blue-700 hover:underline">
+        <i class="fa-solid fa-table"></i> Planilha
+      </a>
+      <button onclick="location.reload()" class="text-sm text-blue-700 hover:underline">
+        <i class="fa-solid fa-rotate-right"></i> Atualizar
+      </button>
+      <button onclick="abrirManual()" class="text-sm text-blue-700 hover:underline">
+        <i class="fa-solid fa-circle-question"></i> Manual
+      </button>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="copiarResumoWhatsApp()" class="bg-[#25D366] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+        <i class="fa-brands fa-whatsapp"></i> WhatsApp
+      </button>
+      <button onclick="baixarImagem()" class="bg-[#2D3277] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+        <i class="fa-solid fa-camera"></i> Exportar HD
+      </button>
+    </div>
+  </header>
+
+  <!-- Menu Principal (3 Cards no meio) -->
+  <div id="screen-menu" class="screen active no-export">
+    <h2 class="text-2xl font-bold text-[#2D3277] mb-6">O que você deseja fazer?</h2>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl">
+      
+      <!-- Card: Dashboard -->
+      <div class="card-menu text-center" onclick="abrirTela('screen-dashboard'); carregarDashboard()">
+        <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-chart-column"></i></div>
+        <h3 class="text-lg font-bold text-[#2D3277]">Dashboard</h3>
+        <p class="text-sm text-gray-500 mt-2">Dashboard, dados e Reportes.</p>
+      </div>
+
+      <!-- Card: Buscar Pendentes -->
+      <div class="card-menu text-center border-2 border-[#FFD700]" onclick="buscarPendentes()">
+        <div class="text-4xl text-[#FFD700] mb-3"><i class="fa-solid fa-magnifying-glass"></i></div>
+        <h3 class="text-lg font-bold text-[#2D3277]">Buscar Pendentes</h3>
+        <p class="text-sm text-gray-500 mt-2">Analise e marca IDs que as Origens ainda não foi iniciada a Tratativa.</p>
+      </div>
+
+      <!-- Card: Disparador -->
+      <div class="card-menu text-center" onclick="abrirTela('screen-email'); carregarEmail()">
+        <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-envelope-open-text"></i></div>
+        <h3 class="text-lg font-bold text-[#2D3277]">Disparo de E-mails</h3>
+        <p class="text-sm text-gray-500 mt-2">Dispara E-mails para as Origens Pendentes.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Tela: Dashboard -->
+  <div id="screen-dashboard" class="screen">
+    <div id="capture-area">
+      
+      <div class="bg-white rounded-lg shadow p-4 mb-4 text-center border-t-4 border-[#FFD700]">
+        <h2 class="text-2xl font-black text-[#2D3277] uppercase tracking-wider" id="dashboard-title">MISSORTED - STATUS</h2>
+      </div>
+
+      <div class="flex justify-between items-center mb-4 no-export">
+        <h3 class="text-lg font-bold text-gray-700">Visão Geral</h3>
+        <div class="flex gap-2">
+          <select id="filter-origem" onchange="aplicarFiltrosDashboard()" class="border rounded px-2 py-1 text-sm">
+            <option value="TODAS">Todas as origens</option>
+          </select>
+          <select id="filter-reclamacao" onchange="aplicarFiltrosDashboard()" class="border rounded px-2 py-1 text-sm">
+            <option value="TODAS">Todas as reclamações</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="kpi-card" style="border-left-color: #ffe600;"><div class="kpi-title">Qtd. de Ativos</div><div class="kpi-value text-2xl font-bold text-gray-900" id="kpi-total">0</div></div>
+        <div class="kpi-card" style="border-left-color: #2d3277;"><div class="kpi-title">Valor Total</div><div id="kpi-valor"></div></div>
+        <div class="kpi-card" style="border-left-color: #ea4335;"><div class="kpi-title">Maior Tempo Estoc.</div><div class="kpi-value text-2xl font-bold text-gray-900" id="kpi-dias-max">0 dias</div></div>
+        <div class="kpi-card" style="border-left-color: #34a853;"><div class="kpi-title">Ticket Médio</div><div id="kpi-ticket"></div></div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 mb-6">
+        <div class="col-span-2 bg-white rounded-lg shadow p-4"><h4 class="font-bold text-sm mb-2">Valor Total por Origem</h4><div id="chart-origem"></div></div>
+        <div class="bg-white rounded-lg shadow p-4"><h4 class="font-bold text-sm mb-2">Distribuição por Reclamação</h4><div id="chart-reclamacao"></div></div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-4">
+        <h4 class="font-bold text-sm mb-2">Relação de IDs</h4>
+        <div class="table-container">
+          <table id="table-ativos">
+            <thead><tr><th>ID</th><th>Origem</th><th>Reclamação?</th><th>Dias Parado</th><th>Valor</th><th>Descrição</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tela: E-mail -->
+  <div id="screen-email" class="screen no-export">
+    <h2 class="text-xl font-bold text-[#2D3277] mb-4">Disparo Massivo de E-mails</h2>
+    
+    <!-- ETAPA 1 -->
+    <div id="email-step-1" class="bg-white rounded-lg shadow p-6 mb-4">
+      <h3 class="font-bold mb-2">1. Selecione as origens</h3>
+      
+      <div class="bg-yellow-50 border border-yellow-300 text-yellow-800 p-3 rounded mb-4 text-sm flex items-center">
+        <input type="checkbox" id="chk-teste" checked class="mr-2 w-4 h-4 cursor-pointer">
+        <label for="chk-teste" class="cursor-pointer font-bold">🧪 MODO TESTE (Envia apenas para wesleyc.carnpere@mercadolivre.com)</label>
+      </div>
+
+      <div id="checkboxes-origens" class="flex flex-wrap gap-3 mb-4"></div>
+      <div class="flex justify-between mt-4">
+        <button onclick="selecionarTodasOrigens(true)" class="bg-gray-500 text-white px-4 py-2 rounded text-sm hover:opacity-80">Marcar todas</button>
+        <button onclick="avancarTemplate()" class="bg-[#2D3277] text-white px-4 py-2 rounded text-sm hover:opacity-80">Configurar mensagem ➡️</button>
+      </div>
+    </div>
+
+    <!-- ETAPA 2 -->
+    <div id="email-step-2" class="bg-white rounded-lg shadow p-6 mb-4 hidden">
+      <p class="text-xs text-blue-700 bg-blue-50 p-2 rounded mb-2"><b>Atenção:</b> Edite como quiser, mas NÃO APAGUE <b>{origem}</b> e <b>{lista_ativos}</b>.</p>
+      <textarea id="txt-template" class="w-full h-64 border rounded p-3 text-sm focus:outline-none focus:border-blue-500"></textarea>
+      <div class="flex justify-between mt-3">
+        <button onclick="voltarEmailStep1()" class="bg-red-500 text-white px-4 py-2 rounded text-sm hover:opacity-80">⬅️ Voltar</button>
+        <button onclick="dispararEmails()" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:opacity-80">🚀 Disparar e-mails</button>
+      </div>
+    </div>
+
+    <!-- ETAPA 3 (RELATÓRIO) -->
+    <div id="email-step-3" class="hidden">
+      
+      <div id="capture-area-report" class="bg-white rounded-lg shadow p-6">
+        <h2 class="report-main-title" id="report-title">Tratativa Missorted Iniciada e E-mails enviados</h2>
+        <div id="area-resultados-email"></div>
+      </div>
+
+      <div class="flex justify-center gap-3 mt-4" data-html2canvas-ignore="true">
+        <button onclick="baixarRelatorio()" class="bg-[#FFD700] text-[#2D3277] font-bold px-4 py-2 rounded text-sm hover:opacity-80"><i class="fa-solid fa-camera"></i> Exportar Imagem</button>
+        <button onclick="wspRelatorio()" class="bg-[#25D366] text-white px-4 py-2 rounded text-sm hover:opacity-80"><i class="fa-brands fa-whatsapp"></i> Copiar P/ WhatsApp</button>
+        <button onclick="abrirTela('screen-menu')" class="bg-[#2D3277] text-white px-4 py-2 rounded text-sm hover:opacity-80"><i class="fa-solid fa-check"></i> Finalizar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbzu4XPQh9tq7Aagt6a5XTflS4epKmXXktem1QDLYKadDYagZLFYj_I6Oa-GJx0EXoVp/exec";
+    let taxaUSD = 5.50;
+    const dataHoje = new Date().toLocaleDateString('pt-BR');
+
+    fetch("https://economia.awesomeapi.com.br/last/USD-BRL")
+      .then(r => r.json())
+      .then(d => { if (d.USDBRL && d.USDBRL.ask) taxaUSD = parseFloat(d.USDBRL.ask); })
+      .catch(() => {});
+
+    async function callAPI(action, payload = {}) {
+      const loader = document.getElementById("loader-overlay");
+      loader.classList.add("show");
+      try {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action, payload }),
+        });
+        const data = await response.json();
+        if (data.erro) throw new Error(data.erro);
+        return data;
+      } catch (err) {
+        Swal.fire("Erro", err.message, "error");
+        throw err;
+      } finally {
+        loader.classList.remove("show");
+      }
+    }
+
+    function abrirTela(id) {
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+    }
+
+    function abrirManual() {
+      Swal.fire({ title: "Manual", html: "O Dashboard exibe os dados da aba Ativos.<br>O Disparo de E-mails processa os itens checados na coluna K.", icon: "info", confirmButtonColor: "#2D3277" });
+    }
+
+    /* ================= DASHBOARD ================= */
+    let datasetGlobalDashboard = [];
+    let datasetFiltradoDashboard = [];
+    let chartOrigemDash = null, chartReclamacaoDash = null;
+
+    async function carregarDashboard() {
+      document.getElementById("dashboard-title").innerText = `MISSORTED - STATUS - ${dataHoje}`;
+      
+      // CORREÇÃO: Inicializa os gráficos ANTES de buscar os dados
+      inicializarGraficosDashboard();
+      
+      try {
+        const res = await callAPI("getDadosIniciais");
+        datasetGlobalDashboard = res.dados || [];
+        popularSelectsDashboard(datasetGlobalDashboard);
+        aplicarFiltrosDashboard();
+      } catch (e) { console.error(e); }
+    }
+
+    function popularSelectsDashboard(dados) {
+      const sOrig = document.getElementById("filter-origem");
+      const sRec = document.getElementById("filter-reclamacao");
+      const origs = [...new Set(dados.map(r => r[2]))].filter(x => x !== "-").sort();
+      const recs = [...new Set(dados.map(r => r[1]))].filter(x => x !== "-").sort();
+
+      sOrig.innerHTML = '<option value="TODAS">Todas</option>' + origs.map(o => `<option value="${o}">${o}</option>`).join("");
+      sRec.innerHTML = '<option value="TODAS">Todas</option>' + recs.map(s => `<option value="${s}">${s}</option>`).join("");
+    }
+
+    function inicializarGraficosDashboard() {
+      const optOrigem = { chart: { type: "bar", height: 300, toolbar: { show: false } }, plotOptions: { bar: { columnWidth: "55%", borderRadius: 4 } }, series: [{ name: "Valor (R$)", data: [] }], xaxis: { categories: [] }, colors: ["#FFD700"], dataLabels: { enabled: false } };
+      const optRec = { chart: { type: "donut", height: 300 }, series: [], labels: [], colors: ["#2D3277", "#ea4335", "#fbbc04", "#34a853"], legend: { position: "bottom" } };
+      
+      if(!chartOrigemDash) {
+        chartOrigemDash = new ApexCharts(document.querySelector("#chart-origem"), optOrigem);
+        chartReclamacaoDash = new ApexCharts(document.querySelector("#chart-reclamacao"), optRec);
+        chartOrigemDash.render(); chartReclamacaoDash.render();
+      }
+    }
+
+    function aplicarFiltrosDashboard() {
+      const vOrig = document.getElementById("filter-origem").value;
+      const vRec = document.getElementById("filter-reclamacao").value;
+
+      datasetFiltradoDashboard = datasetGlobalDashboard.filter(r => {
+        return (vOrig === "TODAS" || r[2] === vOrig) && (vRec === "TODAS" || r[1] === vRec);
+      });
+
+      const qtd = datasetFiltradoDashboard.length;
+      const valor = datasetFiltradoDashboard.reduce((acc, r) => acc + r[3], 0);
+      const maxDias = datasetFiltradoDashboard.length ? Math.max(...datasetFiltradoDashboard.map(r => r[4])) : 0;
+      const ticket = qtd ? valor / qtd : 0;
+
+      document.getElementById("kpi-total").innerText = qtd;
+      document.getElementById("kpi-dias-max").innerText = maxDias + " dias";
+      
+      document.getElementById("kpi-valor").innerHTML = `<div class="val-dolar-lg">${(valor/taxaUSD).toLocaleString("en-US", {style:"currency", currency:"USD"})}</div><div class="val-real-sm">${valor.toLocaleString("pt-BR", {style:"currency", currency:"BRL"})}</div>`;
+      document.getElementById("kpi-ticket").innerHTML = `<div class="val-dolar-lg">${(ticket/taxaUSD).toLocaleString("en-US", {style:"currency", currency:"USD"})}</div><div class="val-real-sm">${ticket.toLocaleString("pt-BR", {style:"currency", currency:"BRL"})}</div>`;
+
+      renderizarTabelaDashboard();
+
+      const porOrigem = {};
+      datasetFiltradoDashboard.forEach(r => { porOrigem[r[2]] = (porOrigem[r[2]] || 0) + r[3]; });
+      const oOrd = Object.entries(porOrigem).sort((a, b) => b[1] - a[1]).slice(0, 15);
+      if (chartOrigemDash) chartOrigemDash.updateOptions({ xaxis: { categories: oOrd.map(x => x[0]) }, series: [{ name: "Valor", data: oOrd.map(x => x[1]) }] });
+
+      const porRec = {};
+      datasetFiltradoDashboard.forEach(r => { porRec[r[1]] = (porRec[r[1]] || 0) + 1; });
+      if (chartReclamacaoDash) chartReclamacaoDash.updateOptions({ labels: Object.keys(porRec), series: Object.values(porRec) });
+    }
+
+    function renderizarTabelaDashboard() {
+      const tbody = document.querySelector("#table-ativos tbody");
+      tbody.innerHTML = "";
+      datasetFiltradoDashboard.slice(0, 100).forEach(r => {
+        const valUSD = (r[3] / taxaUSD).toLocaleString("en-US", {style:"currency", currency:"USD"});
+        const valBRL = r[3].toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><span class="id-badge">${r[0]}</span></td>
+          <td><b>${r[2]}</b></td>
+          <td>${r[1]}</td>
+          <td>${r[4]}</td>
+          <td><strong style="color:#111;">${valUSD}</strong><br><span style="font-size:11px;color:#888;">${valBRL}</span></td>
+          <td style="max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${r[5]}">${r[5]}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /* ================= EXPORTAR E WHATSAPP (DASHBOARD) ================= */
+    function copiarResumoWhatsApp() {
+      if (!datasetFiltradoDashboard || datasetFiltradoDashboard.length === 0) return Swal.fire("Aviso", "Sem dados no Dashboard para copiar.", "warning");
+
+      const hora = new Date().getHours();
+      let saudacao = hora >= 18 ? "Boa Noite" : hora >= 12 ? "Boa Tarde" : "Bom Dia";
+      const dataHojeFormatada = new Date().toLocaleDateString('pt-BR');
+
+      const qtdItens = datasetFiltradoDashboard.length;
+      const valorTotal = datasetFiltradoDashboard.reduce((acc, r) => acc + r[3], 0);
+      const totalReclamacoes = datasetFiltradoDashboard.filter(r => String(r[1]).toLowerCase() === 'sim').length;
+      const maxDias = qtdItens > 0 ? Math.max(...datasetFiltradoDashboard.map(r => r[4])) : 0;
+      const maxValorProd = qtdItens > 0 ? Math.max(...datasetFiltradoDashboard.map(r => r[3])) : 0;
+
+      const usdTotal = (valorTotal / taxaUSD).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+      const brlTotal = valorTotal.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+      const usdMaxProd = (maxValorProd / taxaUSD).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+      const brlMaxProd = maxValorProd.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+      const filtroOrigemDropdown = document.getElementById('filter-origem').value;
+      const origemAtiva = filtroOrigemDropdown !== "TODAS" ? filtroOrigemDropdown : null;
+
+      let mensagem = "";
+
+      if (origemAtiva) {
+        mensagem = `📊 *Missorted - STATUS OFENSOR* ${origemAtiva}\n\n` +
+                   `   ${saudacao} - *Dados dia (${dataHojeFormatada})*\n\n` +
+                   `Nosso Ofensor ${origemAtiva}\n\n` +
+                   `🔹 *Qtd de Itens:* ${qtdItens}\n` +
+                   `💰 *Valor Total:* ${usdTotal} (${brlTotal})\n` +
+                   `   *Total de Reclamação:* ${totalReclamacoes}\n` +
+                   `   *Maior Tempo de Estoque:* ${maxDias} dias\n` +
+                   `   *Produto de maior valor:* ${usdMaxProd} (${brlMaxProd})`;
+      } else {
+        const agrupamentoOrigem = {};
+        datasetFiltradoDashboard.forEach(r => {
+          if (!agrupamentoOrigem[r[2]]) agrupamentoOrigem[r[2]] = { pacotes: 0, valor: 0 };
+          agrupamentoOrigem[r[2]].pacotes += 1;
+          agrupamentoOrigem[r[2]].valor += r[3];
+        });
+
+        let maiorOrigem = "", maxOfensorValor = -1, maxOfensorPacotes = 0;
+        for (const [orig, dados] of Object.entries(agrupamentoOrigem)) {
+          if (dados.valor > maxOfensorValor) {
+            maxOfensorValor = dados.valor; maxOfensorPacotes = dados.pacotes; maiorOrigem = orig;
+          }
+        }
+        
+        const usdOfensor = (maxOfensorValor / taxaUSD).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+        const brlOfensor = maxOfensorValor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+
+        mensagem = `📊 *Missorted - STATUS*\n\n` +
+                   `   ${saudacao} - *Dados dia (${dataHojeFormatada})*\n\n` +
+                   `🔹 *Qtd de Itens:* ${qtdItens}\n` +
+                   `💰 *Valor Total:* ${usdTotal} (${brlTotal})\n` +
+                   `   *Total de Reclamação:* ${totalReclamacoes}\n` +
+                   `   *Maior Tempo de Estoque:* ${maxDias} dias\n` +
+                   `   *Produto de maior valor:* ${usdMaxProd} (${brlMaxProd})\n\n` +
+                   `Maior Origem Ofensora:\n` +
+                   `${maiorOrigem} com ${maxOfensorPacotes} Pacotes somando ${usdOfensor} (${brlOfensor})`;
+      }
+
+      navigator.clipboard.writeText(mensagem).then(() => Swal.fire("Copiado!", "Resumo copiado para o WhatsApp.", "success"));
+    }
+
+    function baixarImagem() {
+      if (!datasetFiltradoDashboard || datasetFiltradoDashboard.length === 0) return Swal.fire("Aviso", "Sem dados para exportar.", "warning");
+      
+      document.getElementById("loader-overlay").classList.add("show");
+      document.body.classList.add("exporting-mode");
+      
+      setTimeout(() => {
+        html2canvas(document.getElementById("capture-area"), { scale: 2, useCORS: true }).then(canvas => {
+          const link = document.createElement('a');
+          link.href = canvas.toDataURL('image/png');
+          link.download = `Dashboard_${new Date().toISOString().split('T')[0]}.png`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+          document.body.classList.remove("exporting-mode");
+          document.getElementById("loader-overlay").classList.remove("show");
+        }).catch(err => {
+          document.body.classList.remove("exporting-mode");
+          document.getElementById("loader-overlay").classList.remove("show");
+          Swal.fire("Erro", "Falha ao gerar imagem.", "error");
+        });
+      }, 500);
+    }
+
+    /* ================= E-MAIL ================= */
+    let dadosPendentesEmail = [];
+    let globalStatsSucesso = null, globalStatsFalha = null;
+
+    const templatePadrao = `Olá, Equipe {origem}. Tudo bem?
+
+Identificamos o recebimento de alguns pacotes pertencentes a SSC1 em sua base ({origem}), devidamente classificados como MISSORTED.
+
+Para mantermos a conformidade e darmos continuidade ao fluxo, pedimos por gentileza que verifiquem a relação abaixo e nos informem o status e o direcionamento físico destes pacotes:
+
+{lista_ativos}
+
+Ficamos no aguardo do seu retorno para procedermos com a baixa sistêmica.
+
+*Aviso: Caso tenha recebido este e-mail por engano ou não seja o responsável por esta tratativa, por favor, sinalize-nos respondendo a esta mensagem para que possamos retirar seu contato da nossa base.*
+
+Atenciosamente,
+Equipe de Inventário - SSC1`;
+
+    async function carregarEmail() {
+      document.getElementById("email-step-1").classList.remove("hidden");
+      document.getElementById("email-step-2").classList.add("hidden");
+      document.getElementById("email-step-3").classList.add("hidden");
+      document.getElementById("txt-template").value = templatePadrao;
+      
+      document.getElementById("report-title").innerText = `Tratativa Missorted Iniciada e E-mails enviados - ${dataHoje}`;
+
+      try {
+        const res = await callAPI("getItensPendentes");
+        dadosPendentesEmail = res.dados || [];
+        if (dadosPendentesEmail.length === 0) {
+          document.getElementById("checkboxes-origens").innerHTML = '<p class="text-red-600 font-bold">Nenhum ativo pendente com check na coluna K.</p>';
+        } else {
+          popularCheckboxesEmail();
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function popularCheckboxesEmail() {
+      const origensUnicas = [...new Set(dadosPendentesEmail.map(i => i.recebidoPor))].filter(x => x).sort();
+      const cont = document.getElementById("checkboxes-origens");
+      cont.innerHTML = "";
+      origensUnicas.forEach(o => {
+        const qtd = dadosPendentesEmail.filter(i => i.recebidoPor === o).length;
+        cont.innerHTML += `
+          <label class="flex items-center gap-2 bg-gray-50 border rounded px-3 py-2 cursor-pointer hover:border-blue-400">
+            <input type="checkbox" class="chk-origem" value="${o}">
+            ${o} <span class="text-xs text-gray-500">(${qtd} itens)</span>
+          </label>`;
+      });
+    }
+
+    function selecionarTodasOrigens(checked) {
+      document.querySelectorAll(".chk-origem").forEach(c => (c.checked = checked));
+    }
+
+    function avancarTemplate() {
+      const marcadas = document.querySelectorAll(".chk-origem:checked");
+      if (marcadas.length === 0) return Swal.fire("Atenção", "Marque ao menos uma origem.", "warning");
+      document.getElementById("email-step-1").classList.add("hidden");
+      document.getElementById("email-step-2").classList.remove("hidden");
+    }
+
+    function voltarEmailStep1() {
+      document.getElementById("email-step-2").classList.add("hidden");
+      document.getElementById("email-step-1").classList.remove("hidden");
+    }
+
+    async function dispararEmails() {
+      const selecionadas = Array.from(document.querySelectorAll(".chk-origem:checked")).map(c => c.value);
+      const template = document.getElementById("txt-template").value;
+      const isTeste = document.getElementById("chk-teste").checked; 
+
+      if (!template.includes("{origem}") || !template.includes("{lista_ativos}")) {
+        return Swal.fire("Atenção", "Mantenha as chaves {origem} e {lista_ativos}.", "warning");
+      }
+
+      try {
+        const res = await callAPI("dispararEmails", { selecionadas, templateTexto: template, isTeste });
+        document.getElementById("email-step-2").classList.add("hidden");
+        document.getElementById("email-step-3").classList.remove("hidden");
+        mostrarTelaDeResultados(res.statsSucesso, res.statsFalha);
+      } catch (e) { console.error(e); }
+    }
+
+    function mostrarTelaDeResultados(sts, stf) {
+      globalStatsSucesso = sts; globalStatsFalha = stf;
+      let html = "";
+
+      if (sts.origens && sts.origens.length > 0) {
+        const usd = (sts.valor/taxaUSD).toLocaleString('en-US', {style:'currency',currency:'USD'});
+        const brl = sts.valor.toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
+        const badges = sts.origens.map(o => `<span class="badge green">${o}</span>`).join('');
+        
+        html += `<div class="report-box success">
+          <div class="report-header">✅ Origens Iniciada Tratativas: ${sts.origens.length}</div>
+          <div class="report-stats">
+            <div class="stat-item"><strong>Pacotes Tratados:</strong><br><span style="font-size: 20px;">${sts.pacotes}</span></div>
+            <div class="stat-item">
+              <div class="val-dolar-lg">${usd}</div><div class="val-real-sm">${brl}</div>
+            </div>
+          </div>
+          <p style="font-size:13px; margin-bottom:10px;">Liderança copiada e histórico salvo.</p>
+          <div class="badge-container">${badges}</div>
+        </div>`;
+      }
+
+      if (stf.origens && stf.origens.length > 0) {
+        const usd = (stf.valor/taxaUSD).toLocaleString('en-US', {style:'currency',currency:'USD'});
+        const brl = stf.valor.toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
+        const badges = stf.origens.map(o => `<span class="badge orange">${o}</span>`).join('');
+
+        html += `<div class="report-box warning">
+          <div class="report-header">⚠️ Tratativas Não Iniciada (Falta de Contato): ${stf.origens.length}</div>
+          <div class="report-stats">
+            <div class="stat-item"><strong>Pacotes Ignorados:</strong><br><span style="font-size: 20px;">${stf.pacotes}</span></div>
+            <div class="stat-item">
+              <div class="val-dolar-lg">${usd}</div><div class="val-real-sm">${brl}</div>
+            </div>
+          </div>
+          <p style="font-size:13px; margin-bottom:10px;">Continuam marcadas na aba Ativos aguardando e-mail válido.</p>
+          <div class="badge-container">${badges}</div>
+        </div>`;
+      }
+      document.getElementById("area-resultados-email").innerHTML = html;
+    }
+
+    function baixarRelatorio() {
+      document.getElementById("loader-overlay").classList.add("show");
+      window.scrollTo(0, 0); 
+      document.body.classList.add('exporting-mode-report');
+
+      setTimeout(() => {
+        html2canvas(document.getElementById('capture-area-report'), { scale: 1.5, useCORS: true }).then(canvas => {
+          const link = document.createElement('a'); 
+          link.href = canvas.toDataURL('image/png'); 
+          link.download = `Relatorio_Envio_${new Date().toISOString().split('T')[0]}.png`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+          document.body.classList.remove('exporting-mode-report'); 
+          document.getElementById("loader-overlay").classList.remove("show");
+        }).catch(e => { 
+          document.body.classList.remove('exporting-mode-report'); 
+          document.getElementById("loader-overlay").classList.remove("show");
+          Swal.fire("Erro", "Falha ao gerar imagem.", "error"); 
+        });
+      }, 500);
+    }
+
+    function wspRelatorio() {
+      if(!globalStatsSucesso || !globalStatsFalha) return;
+      let msg = `📊 *TRATATIVA MISSORTED INICIADA E E-MAILS ENVIADOS*\n\n`;
+      if(globalStatsSucesso.origens.length > 0) {
+        const usd = (globalStatsSucesso.valor/taxaUSD).toLocaleString('en-US',{style:'currency',currency:'USD'});
+        const brl = globalStatsSucesso.valor.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+        msg += `✅ *Origens Iniciada Tratativas:* ${globalStatsSucesso.origens.length}\n📦 *Total Pacotes:* ${globalStatsSucesso.pacotes}\n💵 *Valor:* ${usd} (${brl})\n\n`;
+      }
+      if(globalStatsFalha.origens.length > 0) {
+        const usd = (globalStatsFalha.valor/taxaUSD).toLocaleString('en-US',{style:'currency',currency:'USD'});
+        const brl = globalStatsFalha.valor.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+        msg += `⚠️ *Não Iniciada (Falta Contato):* ${globalStatsFalha.origens.length}\n📦 *Total Pacotes:* ${globalStatsFalha.pacotes}\n💵 *Valor:* ${usd} (${brl})\n`;
+      }
+      navigator.clipboard.writeText(msg).then(()=>Swal.fire("Copiado!", "Relatório copiado.", "success"));
+    }
+
+    async function buscarPendentes() {
+      const confirm = await Swal.fire({
+        title: "Buscar pendentes?",
+        text: "Analise e marca IDs que as Origens ainda não foi iniciada a Tratativa.",
+        icon: "question", showCancelButton: true, confirmButtonText: "Sim, buscar",
+        cancelButtonText: "Cancelar", confirmButtonColor: "#2D3277",
+      });
+
+      if (!confirm.isConfirmed) return;
+
+      try {
+        const res = await callAPI("buscarAtivosPendentes");
+        Swal.fire("Concluído", `${res.modificados} ativos marcados na coluna K.`, "success");
+      } catch (e) { console.error(e); }
+    }
+  </script>
+</body>
+</html>

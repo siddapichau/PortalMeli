@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bipar Inventário</title>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 0; }
+  body { background: #f4f6f9; height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background 0.2s; }
+
+  .header { background: #2D3277; color: white; padding: 15px; text-align: center; position: relative; z-index: 10; }
+  .header h1 { font-size: 1.2rem; font-weight: bold; }
+  .progress-box { background: rgba(255,255,255,0.1); margin-top: 10px; padding: 10px; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-weight: bold; }
+  .progress-num { font-size: 1.5rem; color: #FFD700; }
+
+  .main-content { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 15px; }
+  
+  .input-box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+  .input-box label { font-size: 0.9rem; color: #666; font-weight: bold; margin-bottom: 10px; display: block; }
+  .input-box input { width: 100%; padding: 15px; font-size: 1.5rem; text-align: center; border: 2px solid #2D3277; border-radius: 8px; outline: none; font-weight: bold; color: #2D3277; }
+  .input-box input:focus { box-shadow: 0 0 10px rgba(45,50,119,0.3); }
+
+  .last-items { flex: 1; background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow-y: auto; }
+  .last-items h3 { font-size: 0.9rem; color: #333; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+  .item-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9rem; }
+  .item-row span.id { font-family: monospace; font-weight: bold; color: #2D3277; }
+  .item-row span.desc { color: #666; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* OVERLAY DE SUCESSO GIGANTE */
+  #success-overlay {
+    position: fixed; inset: 0; background: #10B981; z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s ease-in-out;
+  }
+  #success-overlay.show { opacity: 1; pointer-events: auto; }
+  #success-overlay h1 {
+    color: white; font-size: 6rem; font-weight: 900; text-transform: uppercase;
+    text-shadow: 0 10px 20px rgba(0,0,0,0.2); letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- TELA VERDE GIGANTE -->
+<div id="success-overlay">
+  <h1>SUCESSO</h1>
+</div>
+
+<div class="header">
+  <h1>INVENTÁRIO</h1>
+  <div class="progress-box">
+    <div>
+      <span class="progress-num" id="inv-count">0</span> 
+      <span style="font-size:0.8rem; opacity:0.8;">/ <span id="total-count">...</span></span>
+    </div>
+    <!-- Botão Limpar REMOVIDO daqui (agora fica no chamados.html) -->
+  </div>
+</div>
+
+<div class="main-content" id="main-content">
+  <div class="input-box">
+    <label>BIPE O EQUIPAMENTO</label>
+    <input type="text" id="barcode-input" placeholder="Aguardando..." autocomplete="off" autofocus>
+  </div>
+
+  <div class="last-items">
+    <h3>Últimos 10 Bipados</h3>
+    <div id="list-last"></div>
+  </div>
+</div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbwBYVga-nnSAa48v7SnpHVVp_1hFWzzWDohf12__bV6P2NqxpFD_vA-1yNKZQ-gqz0QGA/exec';
+let nomeUsuario = 'Desconhecido';
+let cacheIds = new Set();
+let totalGeral = 0;
+let totalInv = 0;
+let ultimosBipados = [];
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(isSuccess) {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  
+  if (isSuccess) {
+    // SOM ALTO E AGUDO DE SUCESSO
+    osc.type = 'square'; // Onda quadrada distorce e soa mais alto
+    osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+    gain.gain.setValueAtTime(1, audioCtx.currentTime); // VOLUME MÁXIMO (1.0)
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.15);
+  } else {
+    // SOM GRAVE DE ERRO
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+    gain.gain.setValueAtTime(1, audioCtx.currentTime); // VOLUME MÁXIMO
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.4);
+  }
+}
+
+(function getUsuario() {
+  let n = localStorage.getItem("nome");
+  if (!n) { try { n = window.parent.localStorage.getItem("nome"); } catch(e){} }
+  if (n) nomeUsuario = n;
+})();
+
+async function init() {
+  try {
+    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'listar', payload: {} }) });
+    const data = await res.json();
+    if (data.items) {
+      totalGeral = data.items.length;
+      totalInv = 0;
+      data.items.forEach(item => {
+        cacheIds.add(item.id.toUpperCase());
+        if (item.inventariado === 'SIM') totalInv++;
+      });
+      updateProgress(totalInv);
+    }
+  } catch (e) { alert('Erro ao carregar dados'); }
+}
+
+function updateProgress(val) {
+  document.getElementById('inv-count').textContent = val;
+  document.getElementById('total-count').textContent = totalGeral;
+}
+
+document.getElementById('barcode-input').addEventListener('keypress', async function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const code = this.value.trim();
+    if (!code) return;
+    this.value = ''; // Limpa rápido
+    processarBipe(code);
+  }
+});
+
+async function processarBipe(code) {
+  const idUpper = code.toUpperCase();
+  
+  if (cacheIds.has(idUpper)) {
+    // ENCONTRADO - SUCESSO
+    playSound(true);
+    
+    // Efeito piscar a tela inteira de verde com texto
+    const overlay = document.getElementById('success-overlay');
+    overlay.classList.add('show');
+    setTimeout(() => {
+      overlay.classList.remove('show');
+    }, 450); // Fica 450ms na tela
+    
+    totalInv++;
+    updateProgress(totalInv);
+    
+    fetch(API_URL, { 
+      method: 'POST', 
+      body: JSON.stringify({ action: 'bipar', payload: { id: code, usuario: nomeUsuario } }) 
+    });
+    
+    addToList(code, "Bipado com Sucesso");
+    
+  } else {
+    // NÃO ENCONTRADO - ERRO
+    playSound(false);
+    
+    const { value: tipo } = await Swal.fire({
+      title: 'Não Registrado!',
+      text: `O código ${code} não existe. Qual o tipo?`,
+      input: 'select',
+      inputOptions: { 'Etiquetadora': 'Etiquetadora', 'E Portátil': 'E Portátil', 'Impressora Laser': 'Impressora Laser', 'Handheld': 'Handheld', 'Bipador 2D': 'Bipador 2D', 'Notebook': 'Notebook', 'Monitor': 'Monitor', 'TV': 'TV', 'Outro': 'Outro' },
+      inputPlaceholder: 'Selecione o tipo',
+      showCancelButton: true,
+      confirmButtonText: 'Salvar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#E74C3C',
+      didOpen: () => { document.getElementById('barcode-input').blur(); }
+    });
+
+    if (tipo) {
+      fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ action: 'naoRegistrado', payload: { id: code, tipo: tipo, usuario: nomeUsuario } }) 
+      });
+      addToList(code, `Não Reg. (${tipo})`);
+    }
+    
+    document.getElementById('barcode-input').focus();
+  }
+}
+
+function addToList(id, desc) {
+  ultimosBipados.unshift({ id, desc });
+  // ALTERADO PARA MANTER APENAS 10 ITENS
+  if (ultimosBipados.length > 10) ultimosBipados.pop();
+  
+  document.getElementById('list-last').innerHTML = ultimosBipados.map(item => `
+    <div class="item-row">
+      <span class="id">${item.id}</span>
+      <span class="desc">${item.desc}</span>
+    </div>
+  `).join('');
+}
+
+// A função limparInventario() foi removida pois o botão não existe mais aqui.
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ativos BPP 2026 - Painel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        :root { --azul:#2D3277; --amarelo:#FFD700; --fundo:#f4f6f9; }
+        body { background-color: var(--fundo); font-family: system-ui, -apple-system, sans-serif; }
+        .screen { display:none; }
+        .screen.active { display:block; }
+        
+        #loader-overlay { position:fixed; inset:0; background:rgba(255,255,255,.9); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:9999; }
+        #loader-overlay.show { display:flex; }
+        .spinner { width:48px; height:48px; border:5px solid #e5e7eb; border-top-color:var(--azul); border-radius:50%; animation:spin 1s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        .card-menu { background:#fff; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06); cursor:pointer; transition:transform .2s; border:1px solid #e5e7eb; display:flex; flex-direction:column; justify-content:center; text-align:center; }
+        .card-menu:hover { transform:translateY(-4px); box-shadow:0 8px 20px rgba(0,0,0,.1); border-color:var(--azul); }
+        
+        /* TABELA COMPACTADA */
+        .table-container { max-height: 68vh; overflow-y: auto; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        table { width:100%; border-collapse:collapse; font-size:11px; min-width: 1650px; }
+        th { padding:6px 8px; text-align:left; border-bottom:1px solid #dfe6e9; background:#f1f2f6; position:sticky; top:0; color:#000; z-index:2; cursor:pointer; user-select:none; font-size:11px;}
+        td { padding:4px 6px; border-bottom:1px solid #ecf0f1; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; font-weight:500;}
+        tr:hover td { background-color: rgba(241, 248, 255, 0.4) !important; }
+        
+        .filter-row th { top: 27px; background:#dfe6e9; padding:2px 4px; z-index:3; cursor:default;}
+        .filter-row select { width:100%; padding:2px; font-size:10px; border:1px solid #ccc; border-radius:3px; }
+
+        /* MODAL MAIOR */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
+        .modal-content { background: white; width: 1100px; max-width: 95%; border-radius: 8px; box-shadow: 0 4px 25px rgba(0,0,0,0.3); overflow: hidden; display: flex; flex-direction: column; }
+        .modal-header { background: var(--amarelo); padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 25px; font-size: 15px; max-height: 70vh; overflow-y: auto; background-color: #fcfcfc;}
+        .info-section { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 25px; background: white; padding: 20px; border-radius: 6px; border: 1px solid #eee;}
+        .edit-section { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px; background: #f4f6f9; padding: 20px; border-radius: 6px; border: 1px solid #ddd;}
+        .data-item strong { display: block; font-size: 12px; color: #666; text-transform: uppercase; margin-bottom: 6px;}
+        .data-item div { font-size: 16px; font-weight: bold; color: #111; word-break: break-word;}
+        .data-item select { width: 100%; padding: 10px; font-size: 15px; font-weight: bold; border: 1px solid #0984e3; border-radius: 4px; background: #fff; }
+        
+        body.exporting-mode { overflow: hidden !important; }
+        body.exporting-mode #capture-area { position: absolute !important; top: 0 !important; left: 0 !important; width: 1920px !important; height: 1080px !important; padding: 20px !important; box-sizing: border-box !important; background: #ffffff !important; z-index: 99999 !important; }
+        body.exporting-mode .no-export { display: none !important; }
+    </style>
+</head>
+<body class="p-4">
+
+<div id="loader-overlay" class="no-export">
+    <div class="spinner"></div>
+    <p class="mt-4 font-bold text-[#2D3277]">Processando...</p>
+</div>
+
+<header class="bg-white rounded-lg shadow p-3 flex justify-between items-center mb-6 border-t-4 border-[#FFD700] no-export">
+    <div class="flex items-center gap-3">
+        <button onclick="abrirTela('screen-menu')" class="text-[#2D3277] font-bold text-lg hover:opacity-80">
+            <i class="fa-solid fa-house mr-1"></i> Início
+        </button>
+        <span class="text-gray-300">|</span>
+        <a href="https://docs.google.com/spreadsheets/d/12eJfBd7UqUgMcfeUrL8LXNSrIYiOguGuT0jyy-cLfzo/edit" target="_blank" class="text-sm text-blue-700 hover:underline">
+            <i class="fa-solid fa-table"></i> Abrir Planilha
+        </a>
+        <button onclick="location.reload()" class="text-sm text-blue-700 hover:underline">
+            <i class="fa-solid fa-rotate-right"></i> Atualizar App
+        </button>
+    </div>
+    <div class="flex items-center gap-2">
+        <button onclick="gerarMensagemZap()" class="bg-green-600 text-white text-sm px-3 py-1.5 rounded hover:opacity-90" title="Copiar para WhatsApp">
+            <i class="fa-brands fa-whatsapp"></i> Zap
+        </button>
+        <button onclick="baixarImagem()" class="bg-[#2D3277] text-white text-sm px-3 py-1.5 rounded hover:opacity-90" title="Exportar Imagem">
+            <i class="fa-solid fa-camera"></i> Exportar
+        </button>
+    </div>
+</header>
+
+<!-- MENU PRINCIPAL -->
+<div id="screen-menu" class="screen active no-export">
+    <h2 class="text-2xl font-bold text-[#2D3277] mb-6">Ativos BPP 2026 - Painel de Controle</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 max-w-7xl">
+        
+        <div class="card-menu border-t-4 border-[#2D3277]" onclick="window.open('https://docs.google.com/spreadsheets/d/12eJfBd7UqUgMcfeUrL8LXNSrIYiOguGuT0jyy-cLfzo/edit', '_blank')">
+            <div class="text-4xl text-[#2D3277] mb-2"><i class="fa-solid fa-paste"></i></div>
+            <h3 class="text-md font-bold text-[#2D3277]">1. Colar Dados</h3>
+            <p class="text-xs text-gray-500 mt-1">Abrir planilha (Aba Importe)</p>
+        </div>
+
+        <div class="card-menu border-t-4 border-[#34a853]" onclick="executarAcao('importarDados', 'Importando e Atualizando...')">
+            <div class="text-4xl text-[#34a853] mb-2"><i class="fa-solid fa-file-import"></i></div>
+            <h3 class="text-md font-bold text-[#2D3277]">2. Importar Dados</h3>
+            <p class="text-xs text-gray-500 mt-1">Processar Aba Importe</p>
+        </div>
+
+        <div class="card-menu border-t-4 border-[#0ea5e9]" onclick="executarAcao('buscarCFTV', 'Buscando CFTV...')">
+            <div class="text-4xl text-[#0ea5e9] mb-2"><i class="fa-solid fa-video"></i></div>
+            <h3 class="text-md font-bold text-[#2D3277]">3. Buscar CFTV</h3>
+            <p class="text-xs text-gray-500 mt-1">Atualizar Status de Vídeo</p>
+        </div>
+
+        <div class="card-menu border-t-4 border-[#f59e0b]" onclick="executarAcao('atualizarResp', 'Atualizando e Comparando...')">
+            <div class="text-4xl text-[#f59e0b] mb-2"><i class="fa-solid fa-users"></i></div>
+            <h3 class="text-md font-bold text-[#2D3277]">4. Atualizar Resp.</h3>
+            <p class="text-xs text-gray-500 mt-1">Corrigir e Comparar Formulário</p>
+        </div>
+
+        <div class="card-menu border-t-4 border-[#8b5cf6]" onclick="executarAcao('salvarFinalizados', 'Movendo Finalizados...')">
+            <div class="text-4xl text-[#8b5cf6] mb-2"><i class="fa-solid fa-box-archive"></i></div>
+            <h3 class="text-md font-bold text-[#2D3277]">5. Salvar Finalizados</h3>
+            <p class="text-xs text-gray-500 mt-1">Mover para Aba Finalizados</p>
+        </div>
+
+        <div class="card-menu border-t-4 border-[#ef4444]" onclick="abrirTela('screen-reporte')">
+            <div class="text-4xl text-[#ef4444] mb-2"><i class="fa-solid fa-file-invoice"></i></div>
+            <h3 class="text-md font-bold text-[#2D3277]">Central de Reporte</h3>
+            <p class="text-xs text-gray-500 mt-1">Salvar/Visualizar e Relatório</p>
+        </div>
+
+        <div class="card-menu border-t-4 border-[#FFD700]" onclick="abrirTela('screen-dashboard'); carregarDashboard();">
+            <div class="text-4xl text-[#FFD700] mb-2"><i class="fa-solid fa-chart-line"></i></div>
+            <h3 class="text-md font-bold text-[#2D3277]">Dashboard de Análise</h3>
+            <p class="text-xs text-gray-500 mt-1">Mesa de Operações Avançada</p>
+        </div>
+    </div>
+</div>
+
+<!-- TELA: DASHBOARD ANÁLISE -->
+<div id="screen-dashboard" class="screen">
+    <div id="capture-area">
+        <div class="bg-white p-4 rounded-lg shadow mb-4 border-t-4 border-[#FFD700] flex justify-between items-center no-export">
+            <h2 class="text-xl font-black text-[#2D3277]">MESA DE OPERAÇÕES</h2>
+            <input type="text" id="buscaGlobal" class="border p-2 rounded w-64 text-sm" placeholder="🔍 Pesquisa Global..." onkeyup="aoDigitarFiltro()">
+        </div>
+        <div id="dash-content">
+            <div class="text-center p-10"><i class="fa-solid fa-spinner fa-spin text-4xl text-[#2D3277]"></i></div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE EDIÇÃO -->
+<div id="editModal" class="modal-overlay no-export">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center;">
+          <h3 class="text-2xl font-bold text-[#2D3277]">Ativo: <span id="modId"></span></h3>
+          <div class="flex gap-3 ml-6">
+            <a id="linkPackage" href="#" target="_blank" class="bg-white px-4 py-1.5 rounded text-sm font-bold text-gray-700 shadow hover:bg-gray-100">📋 Package</a>
+            <a id="linkShipment" href="#" target="_blank" class="bg-white px-4 py-1.5 rounded text-sm font-bold text-gray-700 shadow hover:bg-gray-100">🔍 Shipment</a>
+          </div>
+        </div>
+        <button class="text-3xl font-bold text-[#2D3277] hover:text-red-500 transition" onclick="fecharModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-section">
+          <div class="data-item"><strong>Status</strong><div id="modStatus"></div></div>
+          <div class="data-item"><strong>Valor USD</strong><div id="modUsd" class="text-green-600"></div></div>
+          <div class="data-item"><strong>Dias Estancados</strong><div id="modDias"></div></div>
+          <div class="data-item"><strong>Reclamação</strong><div id="modReclam"></div></div>
+          <div class="data-item"><strong>Sortings</strong><div id="modSort"></div></div>
+          <div class="data-item"><strong>Inventário</strong><div id="modInv"></div></div>
+          <div class="data-item"><strong>Promessa</strong><div id="modProm"></div></div>
+          <div class="data-item"><strong>Observação</strong><div id="modObs"></div></div>
+          <div class="data-item" style="grid-column: 1 / -1;"><strong>Descrição do Produto</strong><div id="modDesc" class="text-gray-600"></div></div>
+        </div>
+        <div class="edit-section">
+          <div class="data-item"><strong>Responsabilidade</strong><select id="selResp"></select></div>
+          <div class="data-item"><strong>Status CFTV</strong><select id="selCftv"></select></div>
+          <div class="data-item"><strong>Tratativa</strong><select id="selTrat"></select></div>
+        </div>
+        <div class="data-item mt-2">
+          <strong>Ação Operacional</strong>
+          <textarea id="modAcaoInput" class="w-full border p-3 rounded mt-2 focus:ring-2 focus:ring-blue-500 outline-none text-base" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="p-5 bg-white border-t flex justify-end gap-3">
+        <button class="px-6 py-2.5 bg-gray-400 text-white rounded font-bold hover:bg-gray-500 transition text-base" onclick="fecharModal()">Cancelar</button>
+        <button class="px-6 py-2.5 bg-[#2D3277] text-white rounded font-bold hover:bg-blue-900 transition text-base" id="btnSalvarModal" onclick="salvarModal()">💾 Salvar Alterações</button>
+      </div>
+    </div>
+</div>
+
+<!-- TELA: CENTRAL DE REPORTE -->
+<div id="screen-reporte" class="screen">
+    <div id="capture-area-reporte" class="max-w-4xl mx-auto mt-10">
+        <div class="bg-white rounded-lg shadow p-8 text-center border-t-4 border-[#2D3277]">
+            <h2 class="text-2xl font-bold text-[#2D3277] mb-2">Central de Finalização</h2>
+            <p class="text-gray-500 mb-8">O que você deseja fazer agora?</p>
+            
+            <div id="botoes-reporte" class="flex flex-col gap-4 max-w-md mx-auto">
+                <button onclick="executarReporte('salvar')" class="bg-[#3483fa] text-white font-bold py-4 rounded hover:bg-blue-600 transition text-lg shadow flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-floppy-disk"></i> Salvar e Gerar Reporte
+                </button>
+                <button onclick="executarReporte('visualizar')" class="bg-[#00a650] text-white font-bold py-4 rounded hover:bg-green-600 transition text-lg shadow flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-eye"></i> Apenas Visualizar Hoje
+                </button>
+            </div>
+            <div id="loading-reporte" class="hidden mt-6 text-[#2D3277] font-bold">
+                <i class="fa-solid fa-spinner fa-spin mr-2"></i> Aguarde... Processando...
+            </div>
+        </div>
+        
+        <div id="resultado-reporte" class="mt-6 hidden pb-10">
+            <!-- O resultado do reporte será renderizado aqui -->
+        </div>
+    </div>
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz-dueo-yL6cAG9yKQiEWCqIqpVQDJ_Tfv9NhNPX-yYLYK4OLPECptJbdgzMFZxDEp8-g/exec"; 
+
+let dadosGlobais = [], menusNativos = {}, colOrdenacao = 'usd', ordCrescente = false;
+let renderTimer = null, filtroTimer = null, idEmEdicao = null;
+
+function abrirTela(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+async function callAPI(action, payload = {}, showLoader = true) {
+    if (showLoader) document.getElementById('loader-overlay').classList.add('show');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action, payload })
+        });
+        const data = await res.json();
+        if (data.erro) throw new Error(data.erro);
+        return data;
+    } catch (err) {
+        if (showLoader) Swal.fire({ icon:'error', title:'Erro', text: err.message, confirmButtonColor:'#2D3277' });
+        throw err;
+    } finally {
+        if (showLoader) document.getElementById('loader-overlay').classList.remove('show');
+    }
+}
+
+async function executarAcao(action, textoLoader) {
+    Swal.fire({
+        title: 'Confirmar Ação',
+        text: "Deseja realmente executar esta ação?",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#2D3277',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sim, executar',
+        cancelButtonText: 'Cancelar'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            try {
+                const res = await callAPI(action);
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Concluído!',
+                    html: res.mensagem.replace(/\n/g, '<br>'),
+                    confirmButtonColor: '#2D3277'
+                });
+            } catch(e) {}
+        }
+    });
+}
+
+// DASHBOARD ANÁLISE (Mesa de Operações)
+async function carregarDashboard() {
+    try {
+        const res = await callAPI('getDashboardData');
+        if (!res.success) throw new Error(res.erro || "Erro ao carregar dashboard");
+        
+        dadosGlobais = res.data.registros;
+        menusNativos = res.data.menus;
+        
+        var formatBR = Number(res.data.totais.real).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var formatUS = Number(res.data.totais.usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        var html = '<div class="grid grid-cols-4 gap-3 mb-4">' +
+            '<div class="bg-white p-4 rounded shadow border-b-4 border-blue-500 text-center no-export"><h4 class="text-xs font-bold text-gray-500 uppercase">💰 Total (BRL)</h4><div class="text-2xl font-bold">R$ ' + formatBR + '</div></div>' +
+            '<div class="bg-white p-4 rounded shadow border-b-4 border-blue-500 text-center no-export"><h4 class="text-xs font-bold text-gray-500 uppercase">💵 Total (USD)</h4><div class="text-2xl font-bold">$ ' + formatUS + '</div></div>' +
+            '<div class="bg-white p-4 rounded shadow border-b-4 border-red-500 text-center no-export"><h4 class="text-xs font-bold text-gray-500 uppercase">⚠️ Reclamações</h4><div class="text-2xl font-bold">' + res.data.totais.reclamacoes + '</div></div>' +
+            '<div class="bg-white p-4 rounded shadow border-b-4 border-yellow-500 text-center no-export"><h4 class="text-xs font-bold text-gray-500 uppercase">📹 Ativos CFTV</h4><div class="text-2xl font-bold">' + res.data.totais.cftvAtivos + '</div></div>' +
+            '</div>';
+
+        var cols = [
+            { k: 'id', label: 'ID (Clique P/ Editar)' },
+            { k: 'dias', label: 'Dias' },
+            { k: 'sortings', label: 'Sortings' },
+            { k: 'inventario', label: 'Inventário' },
+            { k: 'promessa', label: 'Promessa' },
+            { k: 'reclamacao', label: 'Reclam.' },
+            { k: 'descricao', label: 'Descrição' },
+            { k: 'usd', label: 'Valor USD' },
+            { k: 'status', label: 'Status' },
+            { k: 'observacao', label: 'Observação' },
+            { k: 'responsabilidade', label: 'Resp.' },
+            { k: 'cftv', label: 'CFTV' },
+            { k: 'tratativa', label: 'Tratativa' },
+            { k: 'acao', label: 'Ação Oper.' }
+        ];
+
+        html += '<div class="table-container"><table id="tabelaDados"><thead><tr>';
+        cols.forEach(c => { html += `<th onclick="ordenar('${c.k}')">${c.label} <span id="sort_${c.k}" class="text-[10px] text-blue-500 ml-1"></span></th>`; });
+        html += '</tr><tr class="filter-row">';
+        cols.forEach(c => { html += `<th><select id="f_${c.k}" onchange="aplicarFiltrosEOrdenacao()"></select></th>`; });
+        html += '</tr></thead><tbody id="corpoTabela"></tbody></table></div>';
+        
+        document.getElementById('dash-content').innerHTML = html;
+        gerarMenusSuspensosRapido();
+        aplicarFiltrosEOrdenacao();
+        
+    } catch(err) {
+        document.getElementById('dash-content').innerHTML = `<div class="bg-red-100 p-4 rounded text-red-700 font-bold text-center">${err.message}</div>`;
+    }
+}
+
+function gerarMenusSuspensosRapido() {
+    var colunas = ['id', 'dias', 'sortings', 'inventario', 'promessa', 'reclamacao', 'descricao', 'usd', 'status', 'observacao', 'responsabilidade', 'cftv', 'tratativa', 'acao'];
+    var sets = {}; colunas.forEach(c => sets[c] = new Set());
+    
+    for(var i = 0; i < dadosGlobais.length; i++) {
+        var r = dadosGlobais[i];
+        colunas.forEach(c => sets[c].add(r[c]));
+    }
+
+    colunas.forEach(function(col) {
+        var valoresUnicos = Array.from(sets[col]);
+        valoresUnicos.sort((a, b) => {
+            if (!isNaN(a) && !isNaN(b) && a !== "" && b !== "") return parseFloat(a) - parseFloat(b);
+            return String(a).localeCompare(String(b));
+        });
+        
+        var htmlArr = ['<option value="">Todos</option>']; 
+        valoresUnicos.forEach(function(val) {
+            if (val !== "") {
+                var valExibicao = (col === 'usd') ? '$' + val.toFixed(2) : val;
+                htmlArr.push('<option value="' + val + '">' + valExibicao + '</option>');
+            }
+        });
+        document.getElementById("f_" + col).innerHTML = htmlArr.join('');
+    });
+}
+
+function aoDigitarFiltro() {
+    if (filtroTimer) clearTimeout(filtroTimer);
+    filtroTimer = setTimeout(aplicarFiltrosEOrdenacao, 300); 
+}
+
+function aplicarFiltrosEOrdenacao() {
+    var global = document.getElementById("buscaGlobal").value.toLowerCase();
+    var colunas = ['id', 'dias', 'sortings', 'inventario', 'promessa', 'reclamacao', 'descricao', 'usd', 'status', 'observacao', 'responsabilidade', 'cftv', 'tratativa', 'acao'];
+    var filtros = {};
+    colunas.forEach(c => filtros[c] = document.getElementById("f_" + c).value);
+
+    var dadosFiltrados = dadosGlobais.filter(function(r) {
+        var matchGlobal = true;
+        if (global) matchGlobal = Object.values(r).join(" ").toLowerCase().includes(global);
+        var matchColunas = colunas.every(function(c) {
+            if (filtros[c] === "") return true; 
+            return String(r[c]) === String(filtros[c]); 
+        });
+        return matchGlobal && matchColunas;
+    });
+
+    dadosFiltrados.sort(function(a, b) {
+        var valA = a[colOrdenacao]; var valB = b[colOrdenacao];
+        if (!isNaN(valA) && !isNaN(valB) && valA !== "" && valB !== "") return ordCrescente ? parseFloat(valA) - parseFloat(valB) : parseFloat(valB) - parseFloat(valA);
+        return ordCrescente ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+    });
+
+    document.querySelectorAll('[id^="sort_"]').forEach(el => el.innerHTML = "");
+    if(document.getElementById("sort_" + colOrdenacao)) document.getElementById("sort_" + colOrdenacao).innerHTML = ordCrescente ? "⬆️" : "⬇️";
+    
+    desenharTabelaRapida(dadosFiltrados);
+}
+
+function desenharTabelaRapida(arrayDados) {
+    var tbody = document.getElementById("corpoTabela");
+    tbody.innerHTML = ""; 
+    if (renderTimer) clearTimeout(renderTimer); 
+    
+    var index = 0, chunkSize = 75; 
+
+    function renderizarLote() {
+        var arrHtml = [];
+        var max = Math.min(index + chunkSize, arrayDados.length);
+        
+        for (var i = index; i < max; i++) {
+            var r = arrayDados[i];
+            
+            // 🎨 LÓGICA DE CORES POR RESPONSABILIDADE (AUMENTADAS)
+            var respStr = String(r.responsabilidade || "").toLowerCase();
+            var rowClass = "";
+            if (respStr.includes("service center")) rowClass = "bg-red-100"; // Vermelho pastel (Tailwind)
+            else if (respStr.includes("inventario") || respStr.includes("inventário")) rowClass = "bg-purple-100"; // Roxo pastel (Tailwind)
+            else if (respStr.includes("last mile")) rowClass = "bg-blue-100"; // Azul pastel (Tailwind)
+
+            arrHtml.push(`<tr class="${rowClass}">`);
+            var checkmark = (r.acao && r.acao.toString().trim() !== "") ? ' <span class="text-[12px]" title="Ação Iniciada">✅</span>' : '';
+            
+            arrHtml.push(`<td><a href="#" class="text-blue-600 font-bold text-[13px]" onclick="abrirModalEdicao('${r.id}'); return false;">✏️ ${r.id}${checkmark}</a></td>`);
+            arrHtml.push(`<td class="${r.dias > 15 ? 'text-red-600' : ''} font-bold">${r.dias}</td>`);
+            arrHtml.push(`<td>${r.sortings}</td>`);
+            
+            // 📅 LÓGICA PARA DEIXAR DATA APENAS DD/MM
+            var invFormatado = r.inventario ? String(r.inventario) : "";
+            if(invFormatado.includes('/')) {
+                var p = invFormatado.split('/');
+                if(p.length === 3) invFormatado = p[0] + '/' + p[1]; // Pega apenas dia e mês
+            }
+            arrHtml.push(`<td>${invFormatado}</td>`);
+            
+            arrHtml.push(`<td>${r.promessa}</td><td>${r.reclamacao}</td>`);
+            arrHtml.push(`<td title="${r.descricao}" class="max-w-[180px] truncate">${r.descricao}</td>`);
+            arrHtml.push(`<td class="text-green-600"><b>$${r.usd.toFixed(2)}</b></td>`);
+            arrHtml.push(`<td>${r.status}</td>`);
+            arrHtml.push(`<td title="${r.observacao}" class="max-w-[120px] truncate">${r.observacao}</td>`);
+            arrHtml.push(`<td>${r.responsabilidade}</td>`);
+            arrHtml.push(`<td>${r.cftv}</td>`);
+            arrHtml.push(`<td>${r.tratativa}</td>`);
+            arrHtml.push(`<td title="${r.acao}" class="text-gray-500 max-w-[120px] truncate">${r.acao || '<i class="text-gray-300">...</i>'}</td>`);
+            arrHtml.push('</tr>');
+        }
+        
+        tbody.insertAdjacentHTML('beforeend', arrHtml.join(''));
+        index = max;
+        if (index < arrayDados.length) renderTimer = setTimeout(renderizarLote, 5); 
+    }
+    renderizarLote(); 
+}
+
+function ordenar(coluna) {
+    if (colOrdenacao === coluna) ordCrescente = !ordCrescente; else { colOrdenacao = coluna; ordCrescente = true; }
+    aplicarFiltrosEOrdenacao();
+}
+
+function popularSelect(elementId, opcoesMenu, valorAtual) {
+    var select = document.getElementById(elementId);
+    select.innerHTML = '<option value="">--</option>';
+    if (opcoesMenu && opcoesMenu.length > 0) {
+        opcoesMenu.forEach(function(opt) {
+            var sel = (opt === valorAtual) ? "selected" : "";
+            select.innerHTML += `<option value="${opt}" ${sel}>${opt}</option>`;
+        });
+    }
+}
+
+function abrirModalEdicao(id) {
+    idEmEdicao = id;
+    var r = dadosGlobais.find(x => x.id === id);
+    if(!r) return;
+    
+    document.getElementById("modId").innerText = r.id;
+    document.getElementById("modStatus").innerText = r.status || "-";
+    document.getElementById("modUsd").innerText = "$" + r.usd.toFixed(2);
+    document.getElementById("modDias").innerText = r.dias;
+    document.getElementById("modReclam").innerText = r.reclamacao || "-";
+    document.getElementById("modSort").innerText = r.sortings || "-";
+    document.getElementById("modInv").innerText = r.inventario || "-";
+    document.getElementById("modProm").innerText = r.promessa || "-";
+    document.getElementById("modObs").innerText = r.observacao || "-";
+    document.getElementById("modDesc").innerText = r.descricao || "-";
+    
+    document.getElementById("linkPackage").href = "https://envios.adminml.com/logistics/package-management/package/" + r.id;
+    document.getElementById("linkShipment").href = "https://shipping-bo.adminml.com/sauron/shipments/shipment/" + r.id;
+
+    popularSelect('selResp', menusNativos.responsabilidade, r.responsabilidade);
+    popularSelect('selCftv', menusNativos.cftv, r.cftv);
+    popularSelect('selTrat', menusNativos.tratativa, r.tratativa);
+    document.getElementById("modAcaoInput").value = r.acao || "";
+    
+    document.getElementById("editModal").style.display = "flex";
+}
+
+function fecharModal() {
+    document.getElementById("editModal").style.display = "none";
+    idEmEdicao = null;
+}
+
+async function salvarModal() {
+    var objDados = {
+        "responsabilidade": document.getElementById("selResp").value,
+        "cftv": document.getElementById("selCftv").value,
+        "tratativa": document.getElementById("selTrat").value,
+        "acao operacional": document.getElementById("modAcaoInput").value
+    };
+
+    var btn = document.getElementById("btnSalvarModal");
+    btn.innerText = "⏳ Salvando..."; btn.disabled = true;
+
+    try {
+        const res = await callAPI('salvarEdicaoModal', { id: idEmEdicao, objDadosStr: JSON.stringify(objDados) });
+        var obj = dadosGlobais.find(x => x.id === res.data.id);
+        if (obj) {
+            obj.responsabilidade = res.data.dados["responsabilidade"];
+            obj.cftv = res.data.dados["cftv"];
+            obj.tratativa = res.data.dados["tratativa"];
+            obj.acao = res.data.dados["acao operacional"];
+        }
+        fecharModal();
+        aplicarFiltrosEOrdenacao(); 
+    } catch(e) {
+        Swal.fire('Erro', e.message, 'error');
+    } finally {
+        btn.innerText = "💾 Salvar Alterações"; btn.disabled = false;
+    }
+}
+
+// CENTRAL DE REPORTE
+async function executarReporte(modo) {
+    document.getElementById("botoes-reporte").classList.add("hidden");
+    document.getElementById("loading-reporte").classList.remove("hidden");
+    document.getElementById("resultado-reporte").classList.add("hidden");
+
+    try {
+        const res = await callAPI('processarReporte', { modo });
+        renderizarReporte(res.data, modo);
+    } catch(e) {
+        document.getElementById("botoes-reporte").classList.remove("hidden");
+        document.getElementById("loading-reporte").classList.add("hidden");
+        Swal.fire('Aviso', e.message, 'info');
+    }
+}
+
+function renderizarReporte(resumo, modo) {
+    document.getElementById("loading-reporte").classList.add("hidden");
+    if (resumo.count === 0) {
+        document.getElementById("resultado-reporte").classList.remove("hidden");
+        document.getElementById("resultado-reporte").innerHTML = "<div class='bg-white p-6 rounded text-center text-gray-500'>Nenhum dado encontrado para hoje.</div>";
+        document.getElementById("botoes-reporte").classList.remove("hidden");
+        return;
+    }
+    
+    var formatBR = Number(resumo.totalBRL).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    var formatUS = Number(resumo.totalUSD).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    var html = '<div class="grid grid-cols-3 gap-4 mb-4">' +
+        '<div class="bg-[#2D3277] text-white p-4 rounded text-center shadow"><h4 class="text-xs uppercase opacity-80 mb-1">Total Itens</h4><div class="text-3xl font-bold">' + resumo.count + '</div></div>' +
+        '<div class="bg-white border-b-4 border-[#3483fa] p-4 rounded text-center shadow"><h4 class="text-xs text-gray-500 uppercase mb-1">Tratado (BRL)</h4><div class="text-3xl font-bold text-[#333]">R$ ' + formatBR + '</div></div>' +
+        '<div class="bg-white border-b-4 border-[#00a650] p-4 rounded text-center shadow"><h4 class="text-xs text-gray-500 uppercase mb-1">Tratado (USD)</h4><div class="text-3xl font-bold text-[#00a650]">$ ' + formatUS + '</div></div>' +
+        '</div>';
+        
+    html += '<div class="flex gap-4">';
+    html += '<div class="bg-white p-4 rounded shadow flex-1"><h3 class="font-bold border-b-2 border-[#FFD700] pb-2 mb-3">📋 Responsabilidade</h3><table class="w-full text-sm"><tr><th class="text-left pb-2">Equipe</th><th class="text-right pb-2">Qtd</th></tr>';
+    var chaves = Object.keys(resumo.responsabilidades);
+    chaves.sort(function(a, b) { return resumo.responsabilidades[b] - resumo.responsabilidades[a] }); 
+    for (var i = 0; i < chaves.length; i++) html += `<tr><td class="py-1 font-bold">${chaves[i]}</td><td class="text-right">${resumo.responsabilidades[chaves[i]]}</td></tr>`;
+    html += '</table></div>';
+    
+    html += '<div class="bg-white p-4 rounded shadow flex-[2]"><h3 class="font-bold border-b-2 border-[#FFD700] pb-2 mb-3">📦 Lista de Ativos</h3><div class="max-h-64 overflow-y-auto"><table class="w-full text-sm"><tr><th class="text-left pb-2 sticky top-0 bg-white">ID</th><th class="text-left pb-2 sticky top-0 bg-white">Descrição</th><th class="text-right pb-2 sticky top-0 bg-white">USD</th><th class="text-right pb-2 sticky top-0 bg-white">BRL</th></tr>';
+    for(var k = 0; k < resumo.itens.length; k++) {
+        var it = resumo.itens[k];
+        var u = Number(it.usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var b = Number(it.brl).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        html += `<tr><td class="py-1 font-bold">${it.id}</td><td class="text-xs text-gray-500 truncate max-w-[200px]">${it.descricao}</td><td class="text-right">$${u}</td><td class="text-right">R$${b}</td></tr>`;
+    }
+    html += '</table></div></div></div>';
+    
+    document.getElementById("resultado-reporte").innerHTML = html;
+    document.getElementById("resultado-reporte").classList.remove("hidden");
+    document.getElementById("botoes-reporte").classList.remove("hidden");
+}
+
+// BOTOES GLOBAIS
+function gerarMensagemZap() {
+    const activeScreen = document.querySelector('.screen.active').id;
+    if (activeScreen === 'screen-dashboard') {
+        var brlEl = document.querySelectorAll('.border-blue-500 .text-2xl')[0];
+        var usdEl = document.querySelectorAll('.border-blue-500 .text-2xl')[1];
+        if(brlEl && usdEl) {
+            var msg = `🚨 *Resumo Ativos BPP 2026*\n\n💰 Total BRL: ${brlEl.innerText}\n💵 Total USD: ${usdEl.innerText}`;
+            navigator.clipboard.writeText(msg).then(() => Swal.fire('Copiado!', 'Mensagem pronta.', 'success'));
+        } else {
+            Swal.fire('Aviso', 'Carregue o dashboard primeiro.', 'info');
+        }
+    } else {
+        Swal.fire('Aviso', 'Abra o Dashboard para gerar a mensagem.', 'info');
+    }
+}
+
+function baixarImagem() {
+    const activeScreen = document.querySelector('.screen.active').id;
+    let captureId = '';
+    if (activeScreen === 'screen-dashboard') captureId = 'capture-area';
+    else if (activeScreen === 'screen-reporte') captureId = 'capture-area-reporte';
+    else return Swal.fire('Aviso', 'Abra uma tela com dados para exportar.', 'warning');
+
+    document.getElementById('loader-overlay').classList.add('show');
+    document.body.classList.add('exporting-mode');
+    document.getElementById(captureId).id = 'capture-area'; 
+
+    setTimeout(() => {
+        html2canvas(document.getElementById('capture-area'), { scale: 1.5, useCORS: true, backgroundColor: '#ffffff', width: 1920, height: 1080 })
+        .then(canvas => {
+            const a = document.createElement('a');
+            a.href = canvas.toDataURL('image/png');
+            a.download = `Export_BPP_${new Date().getTime()}.png`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            
+            document.body.classList.remove('exporting-mode');
+            document.getElementById('capture-area').id = captureId;
+            document.getElementById('loader-overlay').classList.remove('show');
+        })
+        .catch(() => {
+            document.body.classList.remove('exporting-mode');
+            document.getElementById('capture-area').id = captureId;
+            document.getElementById('loader-overlay').classList.remove('show');
+            Swal.fire('Erro', 'Falha ao gerar imagem.', 'error');
+        });
+    }, 100); 
+}
+</script>
+</body>
+</html>

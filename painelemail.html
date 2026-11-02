@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root { --bg-header: #FFF159; --text-on-yellow: #2D3277; --primary-btn: #3483fa; --success-btn: #00a650; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, Roboto, sans-serif; }
+    body { background-color: #f4f6f9; color: #333; padding: 20px; display: block !important; }
+    
+    .header { background: var(--bg-header); padding: 15px; border-radius: 8px; text-align: center; color: var(--text-on-yellow); font-weight: 900; font-size: 1.2rem; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    
+    .btn { padding: 12px 20px; border: none; border-radius: 6px; color: white; cursor: pointer; font-weight: bold; transition: opacity 0.2s; text-align: center; display: inline-flex; justify-content: center; align-items: center; gap: 8px; font-size: 14px;}
+    .btn:hover { opacity: 0.8; }
+    .btn-success { background: var(--success-btn); width: 100%; font-size: 16px; padding: 15px; }
+
+    textarea { width: 100%; height: 260px; padding: 15px; border: 2px solid #ccc; border-radius: 8px; outline: none; resize: vertical; font-family: inherit; font-size: 14px; line-height: 1.5; margin-bottom: 10px; background: #fafafa;}
+    textarea:focus { border-color: var(--primary-btn); background: #fff;}
+    
+    .aviso-chaves { background: #eef5ff; border-left: 4px solid var(--primary-btn); padding: 10px; font-size: 13px; color: #333; margin-bottom: 15px; border-radius: 4px;}
+
+    .modo-teste { background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; font-weight: bold;}
+    
+    #loading { display: none; position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(255,255,255,0.95); justify-content: center; align-items: center; z-index: 1000; font-weight: bold; font-size: 1.2rem; color: var(--text-on-yellow); flex-direction: column; gap: 10px;}
+    
+    @keyframes moveTruck {
+      0% { transform: translateX(-60px); opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { transform: translateX(60px); opacity: 0; }
+    }
+    .truck-loader {
+      display: inline-block;
+      font-size: 60px;
+      color: #2D3277;
+      animation: moveTruck 2s linear infinite;
+    }
+
+    #step-2 { display: none; text-align: center; padding: 20px; }
+  </style>
+</head>
+<body>
+
+  <div id="loading">
+    <div class="truck-loader"><i class="fas fa-truck-moving"></i></div>
+    <span id="loading-txt">Carregando...</span>
+  </div>
+
+  <div class="header">📧 DISPARO DE E-MAIL (CFTV)</div>
+
+  <div class="card" id="step-1">
+    <div class="modo-teste">
+      <input type="checkbox" id="chk-teste" style="width:18px; height:18px; cursor:pointer;">
+      <label for="chk-teste" style="cursor:pointer;">🧪 MODO TESTE (Enviar e-mail APENAS para seu e-mail pessoal)</label>
+    </div>
+
+    <div class="aviso-chaves">
+      <b>Atenção:</b> A tag <b>{data_ontem}</b> será substituída automaticamente. Não apague <b>{tabela_dados}</b>.
+    </div>
+
+    <textarea id="txt-template">Solicito a permissão da inclusão destes pacotes no sistema de CFTV. Eles são referentes às pendências do inventário realizado no dia {data_ontem}.
+
+{tabela_dados}
+
+Obrigado.</textarea>
+
+    <button class="btn btn-success" onclick="dispararEmails()">🚀 Enviar E-mail(s) Agora</button>
+  </div>
+
+  <div class="card" id="step-2">
+    <h2 style="color: #00a650; font-size: 24px; margin-bottom: 10px;">✅ Sucesso Absoluto!</h2>
+    <p style="color: #555; margin-bottom: 20px;">O disparo foi processado corretamente.</p>
+    
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 25px;">
+      <p style="font-size: 16px; margin-bottom: 8px;"><b>E-mails disparados:</b> <span id="res-emails" style="color: #2D3277; font-weight: 900;">0</span></p>
+      <p style="font-size: 16px;"><b>Pacotes incluídos:</b> <span id="res-pacotes" style="color: #2D3277; font-weight: 900;">0</span></p>
+    </div>
+
+    <button class="btn" style="background: #2D3277;" onclick="window.close()">Finalizar e Fechar</button>
+  </div>
+
+  <script>
+    // ========= ⚠️ SUBSTITUA PELO SEU URL DO WEB APP AQUI =========
+    const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
+    
+    const successSound = new Audio('https://www.myinstants.com/media/sounds/success-bell.mp3');
+
+    function mostrarLoading(msg) { document.getElementById('loading-txt').innerText = msg; document.getElementById('loading').style.display = 'flex'; }
+    function ocultarLoading() { document.getElementById('loading').style.display = 'none'; }
+
+    async function dispararEmails() {
+      const template = document.getElementById('txt-template').value;
+      const isTeste = document.getElementById('chk-teste').checked;
+
+      if (!template.includes("{tabela_dados}")) return Swal.fire('Erro!', 'A chave {tabela_dados} é obrigatória.', 'error');
+
+      mostrarLoading("Carregando...");
+      
+      let tracker = setInterval(async () => {
+         try {
+           let chk = await fetch(API_URL, { method: 'POST', body: JSON.stringify({action: 'verificarProgresso'}) });
+           let chkJson = await chk.json();
+           let msgEl = document.getElementById('loading-txt');
+           if (msgEl && chkJson.msg) msgEl.innerText = chkJson.msg;
+         } catch(e) {}
+      }, 2500);
+      
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'backendDispararEmails', isTeste: isTeste, templateText: template })
+        });
+        const res = await response.json();
+        
+        clearInterval(tracker);
+        ocultarLoading();
+        if (res.erro) { Swal.fire('Erro!', res.erro, 'error'); } 
+        else {
+          successSound.play();
+          document.getElementById('step-1').style.display = 'none';
+          document.getElementById('step-2').style.display = 'block';
+          document.getElementById('res-emails').innerText = res.qtdEmails;
+          document.getElementById('res-pacotes').innerText = res.qtdPacotes;
+        }
+      } catch (err) {
+        clearInterval(tracker);
+        ocultarLoading(); 
+        Swal.fire('Falha de Comunicação', 'O servidor rejeitou a conexão. ' + err, 'error'); 
+      }
+    }
+  </script>
+</body>
+</html>

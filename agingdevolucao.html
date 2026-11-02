@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aging Devolução SSC1 — Painel</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    :root { --azul:#2D3277; --amarelo:#FFD700; --fundo:#f4f6f9; }
+    body { background: var(--fundo); font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; margin: 0; }
+    .screen { display: none; height: 100%; overflow: auto; padding: 16px; }
+    .screen.active { display: block; }
+
+    #loader-overlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,.9);
+      display: none; flex-direction: column; align-items: center;
+      justify-content: center; z-index: 9999;
+    }
+    #loader-overlay.show { display: flex; }
+    .spinner {
+      width: 48px; height: 48px; border: 5px solid #e5e7eb;
+      border-top-color: var(--azul); border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .card-menu {
+      background: #fff; border-radius: 12px; padding: 26px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06); cursor: pointer;
+      transition: transform .2s; border: 1px solid #e5e7eb;
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .card-menu:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,.1); border-color: var(--azul); }
+
+    .kpi-card { background: #fff; border-radius: 8px; padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.1); border-left: 4px solid var(--amarelo); }
+    .kpi-title { font-size: 11px; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 4px; letter-spacing: .04em; }
+    .kpi-value { font-size: 24px; font-weight: 900; color: #111; line-height: 1; }
+
+    .table-container { max-height: 100%; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 12px; text-align: center; border-bottom: 1px solid #eee; }
+    th { background: #f8f9fa; position: sticky; top: 0; color: #555; z-index: 2;
+         font-weight: bold; text-transform: uppercase; font-size: 11px; }
+    td { color: #333; }
+    tr:hover td { background: #fafafa; }
+
+    .bg-yellow-header { background-color: #FFF159; color: #333; }
+
+    .info-card { border-left: 4px solid var(--amarelo); padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); display: flex; flex-direction: column; gap: 12px; }
+    .info-title { font-size: 1rem; font-style: italic; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 5px; font-weight: 800;}
+    .info-item { font-size: 0.9rem; line-height: 1.4; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px dashed #eee; padding-bottom: 4px; }
+    .info-label { color: #666; font-weight: 800; }
+
+    .area-badge { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; white-space: nowrap; }
+
+    body.exporting-mode #capture-area {
+      position: absolute !important; top: 0; left: 0;
+      width: 1200px !important; height: auto !important;
+      padding: 20px !important; background: #f4f6f9 !important; z-index: 99999;
+    }
+    body.exporting-mode .no-export { display: none !important; }
+    body.exporting-mode .table-container { max-height: none !important; overflow: visible !important; }
+  </style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader-overlay" class="no-export">
+  <div class="spinner"></div>
+  <p class="mt-4 font-bold text-[#2D3277]">Processando…</p>
+</div>
+
+<!-- MENU -->
+<div id="screen-menu" class="screen active">
+  <h2 class="text-2xl font-bold text-[#2D3277] mb-6">O que deseja fazer?</h2>
+  
+  <!-- CARDS PRINCIPAIS -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mb-6">
+    <div class="card-menu text-center border-t-4 border-[#2D3277]" onclick="abrirDashboard()">
+      <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-chart-line"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard</h3>
+      <p class="text-sm text-gray-500 mt-2">Visualizar pacotes pendentes.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#ea4335]" onclick="abrirTela('screen-upload')">
+      <div class="text-4xl text-[#ea4335] mb-3"><i class="fa-solid fa-upload"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Subir CSV</h3>
+      <p class="text-sm text-gray-500 mt-2">Envie o arquivo para a aba <b>usar</b>.</p>
+    </div>
+  </div>
+
+  <!-- AÇÕES RÁPIDAS NO MENU -->
+  <div class="flex max-w-3xl gap-4">
+    <button onclick="rodarQueries()" class="flex-1 bg-[#2D3277] text-white font-bold py-3 rounded hover:opacity-90 transition shadow flex items-center justify-center gap-2">
+      <i class="fa-solid fa-database"></i> Rodar Queries (BigQuery)
+    </button>
+    <button onclick="abrirModalOperadores()" class="flex-1 bg-[#FFD700] text-[#2D3277] font-bold py-3 rounded hover:opacity-90 transition shadow flex items-center justify-center gap-2">
+      <i class="fa-solid fa-users"></i> Definir Operadores
+    </button>
+  </div>
+</div>
+
+<!-- UPLOAD -->
+<div id="screen-upload" class="screen">
+  <div class="bg-white rounded-lg shadow p-6 max-w-2xl mx-auto border-t-4 border-[#ea4335]">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-[#2D3277]"><i class="fa-solid fa-upload mr-2"></i>Enviar CSV e Ações</h2>
+      <button onclick="abrirTela('screen-menu')" class="text-sm text-gray-500 hover:text-gray-800">
+        <i class="fa-solid fa-arrow-left mr-1"></i> Voltar
+      </button>
+    </div>
+    <p class="text-sm text-gray-600 mb-4">Selecione o arquivo CSV. Os dados brutos serão gravados e importados automaticamente.</p>
+
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition cursor-pointer"
+         onclick="document.getElementById('file-input').click()">
+      <i class="fa-solid fa-cloud-arrow-up text-4xl text-gray-400 mb-2"></i>
+      <p class="text-gray-600 font-bold mb-1">Clique para selecionar o CSV</p>
+      <p class="text-xs text-gray-400">Aceito: .csv ou .txt</p>
+      <input type="file" id="file-input" accept=".csv,.txt" class="hidden" onchange="mostrarArquivo()">
+    </div>
+
+    <div id="arquivo-selecionado" class="mt-4 text-sm text-gray-700"></div>
+
+    <!-- BOTOES DE AÇÃO DO UPLOAD -->
+    <div class="flex gap-2 mt-6">
+      <button onclick="enviarArquivo()" class="flex-1 bg-[#ea4335] text-white font-bold py-3 rounded hover:opacity-90 transition">
+        <i class="fa-solid fa-cloud-arrow-up mr-2"></i> Enviar CSV e Importar
+      </button>
+      <button onclick="rodarQueries()" class="bg-[#2D3277] text-white font-bold px-4 py-3 rounded hover:opacity-90 transition" title="Rodar Queries (BigQuery)">
+        <i class="fa-solid fa-database mr-2"></i> Rodar Queries
+      </button>
+    </div>
+
+    <button onclick="abrirModalOperadores()" class="mt-2 w-full bg-[#FFD700] text-[#2D3277] font-bold py-3 rounded hover:opacity-90 transition">
+      <i class="fa-solid fa-users mr-2"></i> Definir Operadores (Preparação / Suporte)
+    </button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="screen-dashboard" class="screen">
+  <div id="capture-area" class="flex flex-col h-full gap-4">
+
+    <!-- TOPBAR (no-export) -->
+    <header class="bg-white rounded-lg shadow p-3 flex justify-between items-center border-t-4 border-[#FFD700] no-export flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <button onclick="abrirTela('screen-menu')" class="text-[#2D3277] font-bold text-lg hover:opacity-80">
+          <i class="fa-solid fa-house mr-1"></i> Início
+        </button>
+        <span class="text-gray-300">|</span>
+        <a href="https://docs.google.com/spreadsheets/d/18tAjWhs9A3OFNfoeSJHT4cumLm1W6oNxRYPsXY7dz3c/edit"
+           target="_blank" class="text-sm text-blue-700 hover:underline">
+          <i class="fa-solid fa-table"></i> Planilha
+        </a>
+        <button onclick="location.reload()" class="text-sm text-blue-700 hover:underline">
+          <i class="fa-solid fa-rotate-right"></i> Atualizar
+        </button>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="compartilharWhatsApp()" class="bg-[#25D366] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+          <i class="fa-brands fa-whatsapp"></i> Copiar p/ WhatsApp
+        </button>
+        <button onclick="baixarImagem()" class="bg-[#2D3277] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+          <i class="fa-solid fa-camera"></i> Exportar Imagem (Top 10)
+        </button>
+      </div>
+    </header>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div class="flex flex-col gap-4 flex-1 min-h-0">
+      
+      <!-- TÍTULO -->
+      <div class="bg-white rounded-lg shadow p-3 text-center border-t-4 border-[#FFD700]">
+        <h2 class="text-2xl font-black text-[#2D3277] uppercase tracking-wider" id="dash-title">AGING DEVOLUÇÃO SSC1</h2>
+      </div>
+
+      <!-- KPIs DO TOPO (Total, Claimed, For Return, Áreas) -->
+      <div class="grid grid-cols-4 gap-3">
+        <div class="kpi-card text-center" style="border-left-color:#2D3277;">
+          <div class="kpi-title">Total Pacotes</div>
+          <div class="kpi-value" id="kpi-total">0</div>
+        </div>
+        <div class="kpi-card text-center" style="border-left-color:#34a853;">
+          <div class="kpi-title">Claimed</div>
+          <div class="kpi-value text-green-600" id="kpi-claimed">0</div>
+        </div>
+        <div class="kpi-card text-center" style="border-left-color:#ea4335;">
+          <div class="kpi-title">For Return</div>
+          <div class="kpi-value text-red-600" id="kpi-forreturn">0</div>
+        </div>
+        <div class="kpi-card text-center" style="border-left-color:#FFD700;">
+          <div class="kpi-title">Qtd por Área (Top 3)</div>
+          <div class="text-sm font-bold text-gray-700 mt-1 flex flex-wrap justify-center gap-1" id="kpi-areas"></div>
+        </div>
+      </div>
+
+      <!-- CONTEÚDO: ESQUERDA (OPERADORES) / DIREITA (TABELA) -->
+      <div class="flex gap-4 flex-1 min-h-0">
+        
+        <!-- SIDEBAR (Operadores e Diário) -->
+        <div class="w-1/4 flex flex-col gap-4">
+          <div class="info-card flex-1">
+            <div class="info-title"><i class="fa-solid fa-book mr-2"></i>Diário de Bordo</div>
+            
+            <div class="info-item">
+              <span class="info-label">Data:</span>
+              <span id="info-data" class="font-bold text-gray-800">--/--/----</span>
+            </div>
+            
+            <div class="info-item">
+              <span class="info-label">Preparação:</span>
+              <span id="info-prep" class="font-bold text-[#2D3277] text-right">-</span>
+            </div>
+            
+            <div class="info-item">
+              <span class="info-label">Suporte e Análise:</span>
+              <span id="info-sup" class="font-bold text-[#2D3277] text-right">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TABELA -->
+        <div class="w-3/4 flex flex-col bg-white rounded-lg shadow overflow-hidden">
+          <div class="bg-yellow-header p-2 border-b border-gray-300 flex justify-between px-4 items-center flex-shrink-0">
+            <h3 class="text-[13px] font-bold text-gray-800">≡ PACOTES PENDENTES</h3>
+            <span class="text-xs font-bold text-gray-700" id="badge-total">0</span>
+          </div>
+          
+          <!-- Filtros (no-export) -->
+          <div class="p-2 border-b bg-gray-50 flex items-center gap-4 no-export flex-shrink-0">
+            <label class="flex items-center gap-1">
+              <span class="text-xs font-bold text-gray-600">Subtatus:</span>
+              <select id="filter-substatus" onchange="aplicarFiltros()" class="border rounded px-2 py-1 text-sm font-bold text-gray-700">
+                <option value="TODOS">Todos</option>
+                <option value="claimed">Claimed</option>
+                <option value="for_return">For Return</option>
+              </select>
+            </label>
+            <button onclick="resetarFiltros()" class="ml-auto text-xs font-bold text-gray-500 hover:text-gray-800">
+              <i class="fa-solid fa-eraser mr-1"></i> Limpar Filtros
+            </button>
+          </div>
+
+          <div class="table-container flex-1">
+            <table id="table-dados">
+              <thead>
+                <tr>
+                  <th class="text-left">ID do envio</th>
+                  <th>Subtatus</th>
+                  <th>Aging Sorting</th>
+                  <th>Aging Devolução</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================
+   CONFIG
+   ===================================================== */
+const API_URL = "https://script.google.com/macros/s/AKfycbw4FNVmM8B4xG1lcVmG2pHqIj025dO_g32boQP5t63rGXnkQOoPJZt6OzhHm5fzGCtPeg/exec";
+
+let globalData = [];
+let dadosFiltradosAtuais = [];
+let analytics = null;
+
+/* =====================================================
+   INFRA
+   ===================================================== */
+function abrirTela(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function fmtNum(v) { return Number(v).toLocaleString('pt-BR'); }
+function esc(v)    { return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+async function callAPI(action, payload = {}) {
+  const loader = document.getElementById('loader-overlay');
+  loader.classList.add('show');
+  try {
+    const res  = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, payload })
+    });
+    const data = await res.json();
+    if (data && data.erro) throw new Error(data.erro);
+    return data;
+  } catch (err) {
+    Swal.fire({ icon:'error', title:'Erro', text: err.message, confirmButtonColor:'#2D3277' });
+    throw err;
+  } finally {
+    loader.classList.remove('show');
+  }
+}
+
+/* =====================================================
+   DASHBOARD
+   ===================================================== */
+async function abrirDashboard() {
+  abrirTela('screen-dashboard');
+  await carregarDados();
+}
+
+async function carregarDados() {
+  try {
+    const resp = await callAPI('getDashboard');
+    globalData = resp.rows || [];
+    
+    const hoje = new Date();
+    const dataFormatada = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
+    document.getElementById('info-data').innerText = dataFormatada;
+    
+    document.getElementById('info-prep').innerText = resp.preparacao || '-';
+    document.getElementById('info-sup').innerText = resp.suporte || '-';
+
+    aplicarFiltros();
+  } catch (e) {
+    document.querySelector('#table-dados tbody').innerHTML =
+      `<tr><td colspan="5" style="color:#b91c1c;font-weight:700;padding:20px">${esc(e.message)}</td></tr>`;
+  }
+}
+
+function resetarFiltros() {
+  document.getElementById('filter-substatus').value = 'TODOS';
+  aplicarFiltros();
+}
+
+function aplicarFiltros() {
+  const vSub = document.getElementById('filter-substatus').value;
+
+  dadosFiltradosAtuais = globalData.filter(r => {
+    const sub = String(r.subtatus || '').trim().toLowerCase();
+    if (vSub !== 'TODOS' && sub !== vSub) return false;
+    return true;
+  });
+
+  analytics = computeAnalytics(dadosFiltradosAtuais);
+  renderDashboard();
+}
+
+function computeAnalytics(rows) {
+  let claimed = 0, forReturn = 0;
+  const byFacility = {};
+
+  rows.forEach(r => {
+    const sub = String(r.subtatus || '').trim().toLowerCase();
+    if (sub === 'claimed') claimed++;
+    else if (sub === 'for_return') forReturn++;
+
+    const fac = String(r.facility || 'Sem Área').trim();
+    byFacility[fac] = (byFacility[fac] || 0) + 1;
+  });
+
+  return { total: rows.length, claimed, forReturn, byFacility };
+}
+
+function renderDashboard() {
+  document.getElementById('kpi-total').innerText = fmtNum(analytics.total);
+  document.getElementById('kpi-claimed').innerText = fmtNum(analytics.claimed);
+  document.getElementById('kpi-forreturn').innerText = fmtNum(analytics.forReturn);
+  document.getElementById('badge-total').innerText = fmtNum(analytics.total) + ' pacote(s)';
+
+  const areas = Object.entries(analytics.byFacility).sort((a,b) => b[1] - a[1]).slice(0, 3);
+  document.getElementById('kpi-areas').innerHTML = areas.map(([k,v]) => 
+    `<span class="area-badge" title="${esc(k)}">${esc(k)}: ${v}</span>`
+  ).join('');
+
+  renderTabela();
+}
+
+function renderTabela() {
+  const tbody = document.querySelector('#table-dados tbody');
+  if (!dadosFiltradosAtuais || dadosFiltradosAtuais.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-gray-400 py-4">Sem dados</td></tr>';
+    return;
+  }
+
+  const ordenados = [...dadosFiltradosAtuais].sort((a, b) => {
+    const va = parseFloat(String(a.agingSorting).replace(',', '.')) || 0;
+    const vb = parseFloat(String(b.agingSorting).replace(',', '.')) || 0;
+    return vb - va;
+  });
+
+  const isExport = document.body.classList.contains('exporting-mode');
+  const displayRows = isExport ? ordenados.slice(0, 10) : ordenados;
+
+  tbody.innerHTML = displayRows.map(r => {
+    return `<tr>
+      <td class="text-left font-bold text-gray-800">${esc(r.id)}</td>
+      <td class="font-bold ${r.subtatus === 'claimed' ? 'text-green-600' : 'text-red-600'}">${esc(r.subtatus)}</td>
+      <td class="font-bold text-blue-700">${esc(r.agingSorting || '-')}</td>
+      <td class="font-bold text-orange-600">${esc(r.agingDevolucao || '-')}</td>
+      <td>R$ ${esc(r.valor)}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* =====================================================
+   MODAL DE OPERADORES (ACESSÍVEL DO MENU E UPLOAD)
+   ===================================================== */
+async function abrirModalOperadores() {
+  let prepAtual = '';
+  let supAtual = '';
+
+  try {
+    const resp = await callAPI('getDashboard');
+    prepAtual = resp.preparacao || '';
+    supAtual  = resp.suporte || '';
+    
+    document.getElementById('info-prep').innerText = prepAtual || '-';
+    document.getElementById('info-sup').innerText = supAtual || '-';
+  } catch (e) {}
+
+  const { value: formValues } = await Swal.fire({
+    title: 'Definir Operadores',
+    html:
+      '<div class="flex flex-col gap-2 text-left px-4">' +
+      '<label class="text-sm font-bold text-gray-700">Preparação:</label>' +
+      `<input id="swal-prep" class="swal2-input !mt-1 !mb-2" placeholder="Nome do operador" value="${esc(prepAtual)}">` +
+      '<label class="text-sm font-bold text-gray-700">Suporte e Análise:</label>' +
+      `<input id="swal-sup" class="swal2-input !mt-1 !mb-2" placeholder="Nome do analista" value="${esc(supAtual)}">` +
+      '</div>',
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: 'Salvar',
+    confirmButtonColor: '#2D3277',
+    cancelButtonColor: '#d33',
+    preConfirm: () => {
+      return {
+        prep: document.getElementById('swal-prep').value,
+        sup: document.getElementById('swal-sup').value
+      };
+    }
+  });
+
+  if (formValues) {
+    try {
+      await callAPI('salvarOperadores', { preparacao: formValues.prep, suporte: formValues.sup });
+      document.getElementById('info-prep').innerText = formValues.prep || '-';
+      document.getElementById('info-sup').innerText = formValues.sup || '-';
+      
+      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Operadores salvos!', showConfirmButton: false, timer: 2000 });
+    } catch (e) {}
+  }
+}
+
+/* =====================================================
+   AÇÃO RODAR QUERIES (ACESSÍVEL DO MENU E UPLOAD)
+   ===================================================== */
+async function rodarQueries() {
+  try {
+    await callAPI('runQueries');
+    Swal.fire({
+      icon: 'success',
+      title: 'Queries Executadas!',
+      text: 'Os dados do BigQuery foram atualizados na planilha.',
+      confirmButtonColor: '#2D3277'
+    });
+    
+    if (document.getElementById('screen-dashboard').classList.contains('active')) {
+      await carregarDados();
+    }
+  } catch (e) {}
+}
+
+/* =====================================================
+   UPLOAD CSV + IMPORTAÇÃO AUTOMÁTICA
+   ===================================================== */
+function mostrarArquivo() {
+  const f = document.getElementById('file-input').files[0];
+  const div = document.getElementById('arquivo-selecionado');
+  div.innerHTML = f
+    ? `<div><i class="fa-solid fa-file-csv text-green-600 mr-2"></i><b>${esc(f.name)}</b> <span class="text-xs bg-gray-200 px-2 py-0.5 rounded ml-2">${(f.size/1024).toFixed(1)} KB</span></div>`
+    : '';
+}
+
+async function enviarArquivo() {
+  const file = document.getElementById('file-input').files[0];
+  if (!file) return Swal.fire('Atenção', 'Selecione o arquivo CSV.', 'warning');
+
+  const loader = document.getElementById('loader-overlay');
+  loader.classList.add('show');
+
+  try {
+    const text = await file.text();
+    const separador = text.includes('\t') ? '\t' : ',';
+    const resp = await callAPI('uploadCSV', { csv: text, separador });
+
+    await Swal.fire({
+      icon: 'success',
+      title: 'Sucesso!',
+      text: `Upload concluído (${resp.inseridos} linhas) e ${resp.importados} pacotes importados para o Dashboard.`,
+      confirmButtonColor: '#2D3277'
+    });
+
+    document.getElementById('file-input').value = '';
+    document.getElementById('arquivo-selecionado').innerHTML = '';
+    abrirDashboard();
+  } catch (err) {
+    Swal.fire({ icon: 'error', title: 'Erro', text: err.message, confirmButtonColor: '#2D3277' });
+  } finally {
+    loader.classList.remove('show');
+  }
+}
+
+/* =====================================================
+   EXPORTAR / COMPARTILHAR
+   ===================================================== */
+function compartilharWhatsApp() {
+  if (!analytics || analytics.total === 0) return Swal.fire('Aviso', 'Sem dados para compartilhar.', 'warning');
+
+  const a = analytics;
+  const dataAtual = document.getElementById('info-data').innerText;
+  const prep = document.getElementById('info-prep').innerText;
+  const sup = document.getElementById('info-sup').innerText;
+
+  let msg = `*AGING DEVOLUÇÃO SSC1 ${dataAtual}*\n\n`;
+  msg += `📦 Total de Pacotes Pendentes: ${fmtNum(a.total)}\n`;
+  msg += `✅ Claimed: ${fmtNum(a.claimed)}\n`;
+  msg += `⏳ For Return: ${fmtNum(a.forReturn)}\n\n\n`;
+  msg += `👷 Preparação: ${prep}\n`;
+  msg += `👨‍💻 Suporte e Análise: ${sup}`;
+
+  navigator.clipboard.writeText(msg).then(() => {
+    Swal.fire({ icon: 'success', title: 'Texto Copiado!', text: 'Os dados foram copiados.', confirmButtonColor: '#2D3277', timer: 2500, showConfirmButton: false });
+  }).catch(() => {
+    Swal.fire('Erro', 'Não foi possível copiar.', 'error');
+  });
+}
+
+function baixarImagem() {
+  if (!analytics || analytics.total === 0) {
+    return Swal.fire('Aviso', 'Sem dados para exportar.', 'warning');
+  }
+  document.getElementById('loader-overlay').classList.add('show');
+  
+  document.body.classList.add('exporting-mode');
+  renderTabela(); 
+
+  setTimeout(() => {
+    html2canvas(document.getElementById('capture-area'), { scale: 2, useCORS: true })
+      .then(canvas => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        const fname = `AgingDevolucao_${new Date().toISOString().split('T')[0]}.png`;
+        a.download = fname;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        
+        document.body.classList.remove('exporting-mode');
+        renderTabela(); 
+        document.getElementById('loader-overlay').classList.remove('show');
+      })
+      .catch(() => {
+        document.body.classList.remove('exporting-mode');
+        renderTabela();
+        document.getElementById('loader-overlay').classList.remove('show');
+        Swal.fire('Erro', 'Falha ao gerar imagem.', 'error');
+      });
+  }, 400);
+}
+</script>
+</body>
+</html>

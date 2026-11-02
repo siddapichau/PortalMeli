@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel de Controle - BPP 2026</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root { --azul:#2D3277; --amarelo:#FFD700; --fundo:#f4f6f9; }
+    body { background-color: var(--fundo); font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .card-btn { transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
+    .card-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+    
+    .truck-loader { display: inline-block; font-size: 50px; color: var(--amarelo); animation: moveTruck 2s linear infinite; }
+    @keyframes moveTruck { 0% { transform: translateX(-60px); opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { transform: translateX(60px); opacity: 0; } }
+    
+    input[type="date"] { appearance: none; -webkit-appearance: none; }
+    
+    .manual-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 640px) { .manual-grid { grid-template-columns: 1fr 1fr; } }
+    .manual-card { background: #fff; border-left: 4px solid #ccc; padding: 12px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; }
+    .manual-card h4 { font-weight: 800; color: #1f2937; margin-bottom: 4px; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .manual-card p { font-size: 11px; color: #6b7280; line-height: 1.4; }
+  </style>
+</head>
+<body class="p-4 md:p-6 flex justify-center">
+  
+  <input type="file" id="csvFileInput" multiple accept=".csv" style="display: none;" onchange="processarMultiplosCSVs(event)">
+
+  <div class="w-full max-w-6xl space-y-6">
+    <div class="bg-white rounded-xl shadow p-4 flex flex-col md:flex-row justify-between items-center gap-4 border-t-4 border-[#FFD700]">
+      <div class="flex items-center gap-4">
+        <span class="text-4xl">📦</span>
+        <div>
+          <h1 class="text-2xl font-black uppercase tracking-wider text-[#2D3277]">Painel de Controle - BPP 2026</h1>
+          <p class="text-[#FFD700] font-bold text-sm">Controle Remoto de Processamento Logístico</p>
+        </div>
+      </div>
+      <div class="flex gap-3 w-full md:w-auto justify-end">
+        <button onclick="verBase()" class="bg-[#2D3277] hover:bg-blue-900 text-white font-bold py-2 px-4 rounded flex items-center gap-2 transition"><i class="fas fa-external-link-alt"></i> Ver Base</button>
+        <button onclick="abrirManual()" class="bg-[#4a5568] hover:bg-gray-600 text-white font-bold py-2 px-4 rounded flex items-center gap-2 transition"><i class="fas fa-book"></i> Manual</button>
+      </div>
+    </div>
+
+    <div class="bg-white p-6 rounded-xl shadow-card flex flex-col md:flex-row gap-6 items-end border border-gray-200">
+      <div class="flex-1 w-full bg-red-50 p-3 rounded-lg border border-red-200">
+        <label class="text-xs font-black text-red-600 uppercase mb-2 block"><i class="fas fa-calendar-minus mr-1"></i> Data Antiga (Aba Anterior)</label>
+        <input type="date" id="inp-data-antiga" class="w-full border-2 border-red-300 bg-white text-red-800 p-3 rounded font-black text-xl text-center focus:outline-none focus:border-red-500 shadow-inner" onchange="salvarDataAntiga(this.value)">
+      </div>
+      <div class="flex-1 w-full bg-green-50 p-3 rounded-lg border border-green-200">
+        <label class="text-xs font-black text-green-600 uppercase mb-2 block"><i class="fas fa-calendar-plus mr-1"></i> Data Nova (Aba Atual)</label>
+        <input type="date" id="inp-data-nova" class="w-full border-2 border-green-300 bg-white text-green-800 p-3 rounded font-black text-xl text-center focus:outline-none focus:border-green-500 shadow-inner" onchange="salvarDataNova(this.value)">
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div onclick="iniciarImportacaoCSV()" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-blue-500 card-btn">
+        <i class="fas fa-file-import text-blue-500 text-2xl mb-2 block"></i>
+        <h3 class="font-black text-gray-800">1º IMPORTAR DADOS</h3>
+        <p class="text-xs text-gray-500 mt-1">Selecione múltiplos CSVs. O sistema unifica e envia.</p>
+      </div>
+      <div onclick="dispararAcao('backendCopiaEFormula', 'Cópia e Fórmula', 'Clona BACKUP, limpa matrizes, importa e formata.')" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-indigo-500 card-btn">
+        <i class="fas fa-copy text-indigo-500 text-2xl mb-2 block"></i>
+        <h3 class="font-black text-gray-800">2º CÓPIA E FÓRMULA</h3>
+        <p class="text-xs text-gray-500 mt-1">Clona BACKUP, limpa matrizes e importa.</p>
+      </div>
+      <div onclick="rodarQuerys()" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-purple-500 card-btn">
+        <i class="fas fa-database text-purple-500 text-2xl mb-2 block"></i>
+        <h3 class="font-black text-gray-800">3º RODAR QUERYS</h3>
+        <p class="text-xs text-gray-500 mt-1">Refresca os dados externos da planilha.</p>
+      </div>
+      <div onclick="dispararAcao('backendPintarEComparar', 'Pintar e Comparar', 'Processa status e operadores atuais.')" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-yellow-400 card-btn">
+        <i class="fas fa-paint-roller text-yellow-400 text-2xl mb-2 block"></i>
+        <h3 class="font-black text-gray-800">4º PINTAR E COMPARAR</h3>
+        <p class="text-xs text-gray-500 mt-1">Status, áreas operacionais e cruzamentos.</p>
+      </div>
+      <div onclick="acaoValorDolar()" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-green-500 card-btn">
+        <i class="fas fa-dollar-sign text-green-500 text-2xl mb-2 block"></i>
+        <h3 class="font-black text-gray-800">5º VALOR DÓLAR</h3>
+        <p class="text-xs text-gray-500 mt-1">Atualiza a cotação financeira atual.</p>
+      </div>
+      <div onclick="dispararAcao('backendEnviarCFTV', 'Enviar para CFTV', 'Filtra e envia ofensores pendentes.')" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-red-500 card-btn">
+        <i class="fas fa-video text-red-500 text-2xl mb-2 block"></i>
+        <h3 class="font-black text-gray-800">6º ENVIAR CFTV</h3>
+        <p class="text-xs text-gray-500 mt-1">Exporta ofensores para planilha externa.</p>
+      </div>
+    </div>
+
+    <!-- Botões Inferiores Lado a Lado -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+      <div onclick="window.open('painelemail.html', '_blank', 'width=850,height=700')" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-orange-500 card-btn text-center">
+        <i class="fas fa-envelope text-orange-500 text-2xl mb-2"></i>
+        <h3 class="font-black text-gray-800 uppercase">Enviar E-mail</h3>
+        <p class="text-xs text-gray-500 mt-1">Abre o painel de disparo para CFTV.</p>
+      </div>
+      <div onclick="window.open('analise.html', '_blank')" class="bg-white p-5 rounded-xl shadow-card border-l-4 border-teal-500 card-btn text-center">
+        <i class="fas fa-table text-teal-500 text-2xl mb-2"></i>
+        <h3 class="font-black text-gray-800 uppercase">Abrir Análise</h3>
+        <p class="text-xs text-gray-500 mt-1">Abre a planilha interativa com filtros múltiplos.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
+    
+    // Áudios: Um para o caminhão (buzina) e outro para ações normais
+    const soundTruckHorn = new Audio('https://www.myinstants.com/media/sounds/truck-horn-honk.mp3');
+    const soundSuccess = new Audio('https://www.myinstants.com/media/sounds/success-bell.mp3');
+    
+    let timerInterval, progressInterval, fakeProgressInterval;
+    let currentFakeProgress = 0;
+
+    async function callAPI(action, payload = {}) {
+      try {
+        const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+        return await response.json();
+      } catch (e) { throw new Error('Falha de conexão.'); }
+    }
+
+    /**
+     * @function iniciarLoading
+     * @description Exibe o modal de carregamento com o caminhão, uma barra de progresso animada e inicia a contagem de tempo.
+     * @param {string} mensagemInicial Texto inicial do que está acontecendo.
+     */
+    function iniciarLoading(mensagemInicial) {
+      let seconds = 0;
+      currentFakeProgress = 0;
+      
+      Swal.fire({
+        title: 'Carregando...',
+        html: `
+          <div class="flex flex-col items-center justify-center p-4">
+            <div class="truck-loader"><i class="fas fa-truck-moving"></i></div>
+            <h2 class="mt-4 font-bold text-lg text-[#2D3277]" id="swal-progresso">${mensagemInicial}</h2>
+            
+            <!-- Barra de Progresso -->
+            <div class="w-full bg-gray-200 rounded-full h-3 mt-4 overflow-hidden border border-gray-300 shadow-inner relative">
+              <div id="swal-bar-fill" class="bg-gradient-to-r from-yellow-400 to-yellow-500 h-3 rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+            </div>
+            
+            <p class="text-xs text-gray-500 mt-3 font-bold" id="swal-timer">Tempo: 00:00</p>
+          </div>`,
+        allowOutsideClick: false, 
+        showConfirmButton: false
+      });
+
+      // Contador de tempo
+      timerInterval = setInterval(() => {
+        seconds++; 
+        let min = Math.floor(seconds / 60).toString().padStart(2, '0'); 
+        let sec = (seconds % 60).toString().padStart(2, '0');
+        let timerEl = document.getElementById('swal-timer'); 
+        if (timerEl) timerEl.innerText = `Tempo: ${min}:${sec}`;
+      }, 1000);
+
+      // Polling com o servidor para pegar o texto exato (setProgress)
+      progressInterval = setInterval(async () => {
+         try { 
+             let chk = await fetch(API_URL, { method: 'POST', body: JSON.stringify({action: 'verificarProgresso'}) }); 
+             let chkJson = await chk.json(); 
+             let msgEl = document.getElementById('swal-progresso'); 
+             if (msgEl && chkJson.msg) msgEl.innerText = chkJson.msg; 
+         } catch(e) {}
+      }, 2500);
+
+      // Barra de progresso "fake" que vai enchendo até 95% para dar feedback visual enquanto o servidor trabalha
+      fakeProgressInterval = setInterval(() => {
+          if (currentFakeProgress < 95) {
+              // Quanto mais perto de 95, mais devagar enche
+              let increment = (95 - currentFakeProgress) * 0.05 + 0.5; 
+              currentFakeProgress += increment;
+              let barFill = document.getElementById('swal-bar-fill');
+              if (barFill) barFill.style.width = `${currentFakeProgress}%`;
+          }
+      }, 500);
+    }
+
+    /**
+     * @function pararLoading
+     * @description Finaliza o loading, completa a barra em 100% e toca o som de buzina.
+     * @param {boolean} tocarBuzina Define se deve tocar o som de caminhão (true) ou apenas fechar.
+     */
+    function pararLoading(tocarBuzina = true) {
+      clearInterval(timerInterval); 
+      clearInterval(progressInterval); 
+      clearInterval(fakeProgressInterval);
+      
+      let barFill = document.getElementById('swal-bar-fill');
+      if (barFill) barFill.style.width = '100%';
+      
+      setTimeout(() => {
+          if (tocarBuzina) { soundTruckHorn.play().catch(e => console.log("Áudio bloqueado")); }
+          Swal.close();
+      }, 400);
+    }
+
+    async function syncDatasComServidor() {
+      const novaInput = document.getElementById('inp-data-nova').value; const antigaInput = document.getElementById('inp-data-antiga').value;
+      let dataNova = "", dataAntiga = "";
+      if (novaInput) { const [a,m,d] = novaInput.split('-'); dataNova = `${d}/${m}`; }
+      if (antigaInput) { const [a,m,d] = antigaInput.split('-'); dataAntiga = `${d}/${m}`; }
+      if (dataNova && dataAntiga) await callAPI('salvarDatas', { dataNova, dataAntiga });
+    }
+
+    window.onload = async () => {
+      try {
+        const res = await callAPI('obterDatasIniciais');
+        if (res && !res.erro) {
+          if (res.dataNova) { const [dia, mes] = res.dataNova.split('/'); document.getElementById('inp-data-nova').value = `${new Date().getFullYear()}-${mes}-${dia}`; }
+          if (res.dataAntiga) { const [dia, mes] = res.dataAntiga.split('/'); document.getElementById('inp-data-antiga').value = `${new Date().getFullYear()}-${mes}-${dia}`; }
+        }
+      } catch (e) {}
+    };
+
+    async function salvarDataNova(valor) { if (!valor) return; const [ano, mes, dia] = valor.split('-'); await callAPI('salvarDatas', { dataNova: `${dia}/${mes}` }); }
+    async function salvarDataAntiga(valor) { if (!valor) return; const [ano, mes, dia] = valor.split('-'); await callAPI('salvarDatas', { dataAntiga: `${dia}/${mes}` }); }
+
+    function iniciarImportacaoCSV() { document.getElementById('csvFileInput').click(); }
+
+    function processarMultiplosCSVs(event) {
+      const filesArray = Array.from(event.target.files); if (filesArray.length === 0) return;
+      const numFiles = filesArray.length; const inputElement = event.target; 
+      iniciarLoading('Lendo e unificando os arquivos CSVs...');
+      const filePromises = filesArray.map(file => new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = e => resolve({ name: file.name, content: e.target.result }); reader.onerror = e => reject(e); reader.readAsText(file, 'UTF-8');
+      }));
+
+      Promise.all(filePromises).then(async (filesData) => {
+        let header = ""; let combinedRows = [];
+        filesData.forEach((file, index) => {
+          let content = file.content.replace(/^\uFEFF/, ''); let lines = content.split(/\r\n|\n|\r/).filter(line => line.trim() !== "");
+          if (lines.length === 0) return;
+          if (index === 0) { header = lines[0]; combinedRows.push(...lines); } else { if (lines.length > 1) combinedRows.push(...lines.slice(1)); }
+        });
+
+        const mergedCsvText = combinedRows.join('\n'); inputElement.value = ''; 
+        if (mergedCsvText.trim() === "") { pararLoading(false); return Swal.fire('Erro', 'Nenhum dado válido.', 'error'); }
+        
+        const progEl = document.getElementById('swal-progresso'); if (progEl) progEl.innerText = "Sincronizando datas...";
+        await syncDatasComServidor();
+        if (progEl) progEl.innerText = "Enviando para o Google Sheets...";
+
+        try {
+          const res = await callAPI('importarCSV', { csvText: mergedCsvText }); pararLoading(true);
+          if (res.erro) throw new Error(res.erro); 
+          soundSuccess.play().catch(e => console.log("Áudio bloqueado")); 
+          Swal.fire('Sucesso!', `Dados de ${numFiles} arquivo(s) importados.`, 'success');
+        } catch(err) { pararLoading(false); Swal.fire('Erro', err.message, 'error'); }
+      }).catch(err => { inputElement.value = ''; pararLoading(false); Swal.fire('Erro', 'Falha ao ler.', 'error'); });
+    }
+
+    function verBase() {
+      Swal.fire({
+        title: 'Áreas a baixar da Gestão de pacotes',
+        html: '<p class="text-sm text-left mb-4">• Parado no percurso<br>• Para despachar<br>• Para devolução<br>• Parados<br>• Devolução bulky<br>• Para solução de problemas<br>• Buffered</p><p class="text-xs text-gray-500 mb-4 font-bold border-t pt-2">Dica: Baixe todos e jogue juntos no botão "1º Importar Dados". O sistema fará o merge!</p><div class="flex gap-2"><a href="https://envios.adminml.com/logistics/package-management" target="_blank" class="bg-[#2D3277] text-white font-bold p-2 rounded flex-1 no-underline">Gestão de Pacotes</a></div>',
+        showConfirmButton: false, width: 450
+      });
+    }
+
+    function abrirManual() {
+      Swal.fire({
+        title: '<div class="text-xl font-black text-[#2D3277]"><i class="fas fa-book-open text-[#FFD700] mr-2"></i>Manual</div>',
+        html: `<div class="manual-grid mt-4">
+            <div class="manual-card border-blue-500"><h4><i class="fas fa-file-import text-blue-500"></i> 1. Importar</h4><p>Selecione múltiplos CSVs. O sistema unifica e envia.</p></div>
+            <div class="manual-card border-indigo-500"><h4><i class="fas fa-copy text-indigo-500"></i> 2. Cópia e Fórmula</h4><p>Clona BACKUP, limpa e formata.</p></div>
+            <div class="manual-card border-purple-500"><h4><i class="fas fa-database text-purple-500"></i> 3. Querys</h4><p>Aciona BigQuery.</p></div>
+            <div class="manual-card border-yellow-400"><h4><i class="fas fa-paint-roller text-yellow-500"></i> 4. Pintar</h4><p>Pinta squads e herda status.</p></div>
+            <div class="manual-card border-green-500"><h4><i class="fas fa-dollar-sign text-green-500"></i> 5. Dólar</h4><p>Converte Reais para Dólar.</p></div>
+            <div class="manual-card border-red-500"><h4><i class="fas fa-video text-red-500"></i> 6. CFTV</h4><p>Exporta anomalias > $500.</p></div>
+            <div class="manual-card border-teal-500 col-span-1 md:col-span-2 bg-teal-50"><h4><i class="fas fa-table text-teal-500"></i> Abrir Análise</h4><p>Abre a planilha interativa em outra aba com filtros múltiplos e carregamento rápido.</p></div>
+          </div>`,
+        width: 750, confirmButtonColor: '#2D3277', confirmButtonText: 'Entendi'
+      });
+    }
+
+    async function dispararAcao(acaoBackend, titulo, aviso) {
+      const confirm = await Swal.fire({ title: titulo, text: aviso, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ffcc00', confirmButtonText: '<span class="text-black font-bold">🚀 EXECUTAR</span>', cancelButtonText: 'Cancelar' });
+      if (confirm.isConfirmed) {
+        iniciarLoading('Sincronizando datas...');
+        try {
+          await syncDatasComServidor();
+          const progEl = document.getElementById('swal-progresso'); if (progEl) progEl.innerText = "Iniciando Servidor...";
+          
+          const res = await callAPI(acaoBackend, { forcarSobrescrita: false }); pararLoading(true);
+          
+          if (res.erro) throw new Error(res.erro);
+          if (res.mensagem && res.mensagem.startsWith("⛔ AVISO: A aba")) {
+             const confirmOver = await Swal.fire({ title: 'Aba já existe', text: 'A aba de destino já existe. Deseja apagar e refazer?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sim, sobrescrever' });
+             if (confirmOver.isConfirmed) {
+               iniciarLoading('Sobrescrevendo...');
+               const resForce = await callAPI(acaoBackend, { forcarSobrescrita: true }); pararLoading(true);
+               if (resForce.erro) throw new Error(resForce.erro);
+               soundSuccess.play().catch(e => console.log("Áudio bloqueado")); 
+               Swal.fire('Concluído!', resForce.mensagem, 'success');
+             }
+             return;
+          }
+          if (res.mensagem && res.mensagem.startsWith("⛔")) throw new Error(res.mensagem);
+          
+          soundSuccess.play().catch(e => console.log("Áudio bloqueado")); 
+          Swal.fire({ title: 'Concluído! ✅', html: `<pre class="text-left text-xs bg-gray-100 p-2 rounded max-h-48 overflow-y-auto mt-2">${res.mensagem}</pre>`, icon: 'success', confirmButtonColor: '#27ae60' });
+        } catch (e) { pararLoading(false); Swal.fire('Erro ❌', e.message, 'error'); }
+      }
+    }
+
+    async function acaoValorDolar() {
+      const confirm = await Swal.fire({ title: 'Confirmar', text: 'Deseja calcular Dólar?', showCancelButton: true, confirmButtonText: 'Sim' });
+      if (confirm.isConfirmed) {
+        iniciarLoading('Sincronizando datas...');
+        try {
+          await syncDatasComServidor();
+          const progEl = document.getElementById('swal-progresso'); if (progEl) progEl.innerText = "Puxando Cotação...";
+          const res = await callAPI('valorEmDolar'); pararLoading(true);
+          if (res.erro) throw new Error(res.erro); 
+          soundSuccess.play().catch(e => console.log("Áudio bloqueado")); 
+          Swal.fire('Sucesso!', `${res.atualizacoes} convertidos.\n${res.limpados} limpos.\nCotação: R$ ${res.taxa.toFixed(2)}`, 'success');
+        } catch(e) { pararLoading(false); Swal.fire('Erro', e.message, 'error'); }
+      }
+    }
+
+    async function rodarQuerys() {
+      const confirm = await Swal.fire({ title: '🔄 Querys', text: 'Atualizar BigQuery?', showCancelButton: true, confirmButtonText: 'Executar' });
+      if(confirm.isConfirmed) {
+        iniciarLoading('Sincronizando datas...');
+        try {
+          await syncDatasComServidor();
+          const progEl = document.getElementById('swal-progresso'); if (progEl) progEl.innerText = "Conectando BigQuery...";
+          await callAPI('backendIniciarQuerys'); let status = 'RUNNING';
+          
+          const progEl2 = document.getElementById('swal-progresso'); 
+          while(status === 'RUNNING') { 
+              await new Promise(r => setTimeout(r, 4000)); 
+              const res = await callAPI('backendVerificarStatusQuerys'); 
+              status = res.status; 
+              if(progEl2 && status === 'RUNNING') progEl2.innerText = "Aguardando BigQuery processar...";
+          }
+          pararLoading(true); 
+          soundSuccess.play().catch(e => console.log("Áudio bloqueado")); 
+          Swal.fire('✅ Concluído!', 'Querys atualizadas.', 'success');
+        } catch(e) { pararLoading(false); Swal.fire('Erro', e.message, 'error'); }
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel de Avarias — Reporte</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<style>
+  :root { --azul:#2D3277; --amarelo:#FFD700; --fundo:#f4f6f9; }
+  body { background-color: var(--fundo); font-family: system-ui, -apple-system, sans-serif; }
+  .screen { display:none; }
+  .screen.active { display:block; }
+
+  #loader-overlay {
+    position:fixed; inset:0; background:rgba(255,255,255,.9);
+    display:none; flex-direction:column; align-items:center; justify-content:center; z-index:9999;
+  }
+  #loader-overlay.show { display:flex; }
+  .spinner { width:48px; height:48px; border:5px solid #e5e7eb; border-top-color:var(--azul); border-radius:50%; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .card-menu { background:#fff; border-radius:12px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+    cursor:pointer; transition:transform .2s; border:1px solid #e5e7eb; display:flex; flex-direction:column; justify-content:center; }
+  .card-menu:hover { transform:translateY(-4px); box-shadow:0 8px 20px rgba(0,0,0,.1); border-color:#2D3277; }
+
+  .kpi-card { background:#fff; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.1); border-left:4px solid var(--amarelo); }
+  .kpi-title { font-size:12px; color:#666; text-transform:uppercase; font-weight:bold; margin-bottom:6px; }
+  .val-dolar-lg { font-size:24px; font-weight:900; color:#111; line-height:1.1; }
+  .val-real-sm { font-size:12px; font-weight:700; color:#888; }
+
+  .table-container { max-height:280px; overflow-y:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:8px 12px; text-align:left; border-bottom:1px solid #eee; }
+  th { background:#f8f9fa; position:sticky; top:0; color:#555; z-index:2; }
+  .id-badge { background:#e8eaed; padding:2px 6px; border-radius:4px; font-family:monospace; }
+  .status-pill { padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; }
+  .st-ok   { background:#dcfce7; color:#166534; }
+  .st-warn { background:#fef3c7; color:#92400e; }
+  .st-bad  { background:#fee2e2; color:#991b1b; }
+  .st-neu  { background:#e5e7eb; color:#374151; }
+
+  body.exporting-mode #capture-area {
+    position:absolute !important; top:0; left:0;
+    width:1200px !important; height:auto !important; padding:20px !important;
+    background:#f4f6f9 !important; z-index:99999;
+  }
+  body.exporting-mode .no-export { display:none !important; }
+</style>
+</head>
+<body class="p-4 min-w-[900px]">
+
+<div id="loader-overlay" class="no-export">
+  <div class="spinner"></div>
+  <p class="mt-4 font-bold text-[#2D3277]">Processando…</p>
+</div>
+
+<!-- ============== TOPBAR ============== -->
+<header class="bg-white rounded-lg shadow p-3 flex justify-between items-center mb-6 border-t-4 border-[#FFD700] no-export">
+  <div class="flex items-center gap-3">
+    <button onclick="abrirTela('screen-menu')" class="text-[#2D3277] font-bold text-lg hover:opacity-80">
+      <i class="fa-solid fa-house mr-1"></i> Início
+    </button>
+    <span class="text-gray-300">|</span>
+    <a href="https://docs.google.com/spreadsheets/d/16DoKYtmkU2_dCCpKrMHkXK20ZaRbopy2qqmv1b6-dTQ/edit"
+       target="_blank" class="text-sm text-blue-700 hover:underline">
+      <i class="fa-solid fa-table"></i> Planilha
+    </a>
+    <button onclick="location.reload()" class="text-sm text-blue-700 hover:underline">
+      <i class="fa-solid fa-rotate-right"></i> Atualizar
+    </button>
+    <button onclick="abrirManual()" class="text-sm text-blue-700 hover:underline">
+      <i class="fa-solid fa-circle-question"></i> Manual
+    </button>
+  </div>
+  <div class="flex items-center gap-2">
+    <button onclick="copiarResumoWhatsApp()" class="bg-[#25D366] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+      <i class="fa-brands fa-whatsapp"></i> WhatsApp
+    </button>
+    <button onclick="baixarImagem()" class="bg-[#2D3277] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+      <i class="fa-solid fa-camera"></i> Exportar HD
+    </button>
+  </div>
+</header>
+
+<!-- ============== MENU ============== -->
+<div id="screen-menu" class="screen active no-export">
+  <h2 class="text-2xl font-bold text-[#2D3277] mb-6">Qual período deseja analisar?</h2>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl">
+
+    <div class="card-menu text-center border-t-4 border-[#2D3277]" onclick="abrirDashboard('daily')">
+      <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-calendar-day"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Diário</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha o <b>dia</b>. Evolução: últimas <b>4 semanas</b> até esse dia.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#FFD700]" onclick="abrirDashboard('weekly')">
+      <div class="text-4xl text-[#FFD700] mb-3"><i class="fa-solid fa-calendar-week"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Semanal</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha a <b>semana (xxw)</b>. Evolução: últimas <b>4 semanas</b> até ela.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#ea4335]" onclick="abrirDashboard('monthly')">
+      <div class="text-4xl text-[#ea4335] mb-3"><i class="fa-solid fa-calendar-days"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Mensal</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha o <b>mês</b>. Evolução: últimos <b>3 meses</b> até ele.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============== DASHBOARD ============== -->
+<div id="screen-dashboard" class="screen">
+  <div id="capture-area">
+
+    <div class="bg-white rounded-lg shadow p-4 mb-4 text-center border-t-4 border-[#FFD700]">
+      <h2 class="text-2xl font-black text-[#2D3277] uppercase tracking-wider" id="dashboard-title">AVARIAS - STATUS</h2>
+    </div>
+
+    <!-- ========== FILTROS ========== -->
+    <div class="bg-white rounded-lg shadow p-3 mb-4 flex flex-wrap items-center gap-2 no-export">
+      <span class="text-xs font-black text-gray-500 uppercase tracking-wider mr-1">Filtros:</span>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600" id="filter-periodo-label">Dia:</span>
+        <select id="filter-periodo" onchange="aplicarFiltrosDashboard()" class="border rounded px-2 py-1 text-sm"></select>
+      </label>
+
+      <label class="flex items-center gap-1" id="wrap-operador">
+        <span class="text-xs font-bold text-gray-600">Operador:</span>
+        <select id="filter-operador" onchange="aplicarFiltrosDashboard()" class="border rounded px-2 py-1 text-sm">
+          <option value="TODOS">Todos</option>
+        </select>
+      </label>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600">Origem:</span>
+        <select id="filter-origem" onchange="aplicarFiltrosDashboard()" class="border rounded px-2 py-1 text-sm">
+          <option value="TODAS">Todas</option>
+        </select>
+      </label>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600">Status:</span>
+        <select id="filter-status" onchange="aplicarFiltrosDashboard()" class="border rounded px-2 py-1 text-sm">
+          <option value="TODOS">Todos</option>
+        </select>
+      </label>
+
+      <button onclick="resetarFiltros()" class="ml-auto bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-3 py-1.5 rounded">
+        <i class="fa-solid fa-eraser mr-1"></i> Limpar extras
+      </button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-4 gap-4 mb-6">
+      <div class="kpi-card" style="border-left-color:#ffe600;">
+        <div class="kpi-title">Qtd. de Pacotes</div>
+        <div class="kpi-value text-2xl font-bold text-gray-900" id="kpi-total">0</div>
+      </div>
+      <div class="kpi-card" style="border-left-color:#2d3277;">
+        <div class="kpi-title">Valor Total</div>
+        <div id="kpi-valor"></div>
+      </div>
+      <div class="kpi-card" style="border-left-color:#34a853;">
+        <div class="kpi-title">Ticket Médio</div>
+        <div id="kpi-ticket"></div>
+      </div>
+      <div class="kpi-card" style="border-left-color:#ea4335;">
+        <div class="kpi-title">Maior Avaria</div>
+        <div id="kpi-maior"></div>
+      </div>
+    </div>
+
+    <!-- Charts principais -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="col-span-2 bg-white rounded-lg shadow p-4">
+        <h4 class="font-bold text-sm mb-2">Top 10 Origens por Valor</h4>
+        <div id="chart-origem"></div>
+      </div>
+      <div class="bg-white rounded-lg shadow p-4">
+        <h4 class="font-bold text-sm mb-2">Distribuição por Status</h4>
+        <div id="chart-status"></div>
+      </div>
+    </div>
+
+    <!-- Evolução -->
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+      <h4 class="font-bold text-sm mb-2" id="chart-evolucao-title">Evolução Semanal</h4>
+      <div id="chart-evolucao"></div>
+    </div>
+
+    <!-- Tabela -->
+    <div class="bg-white rounded-lg shadow p-4">
+      <h4 class="font-bold text-sm mb-2" id="table-title">Relação de Pacotes</h4>
+      <div class="table-container">
+        <table id="table-ativos">
+          <thead>
+            <tr>
+              <th>ID</th><th>Data</th><th>Operador</th><th>Origem</th><th>Valor</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG
+============================================================ */
+const API_URL = "https://script.google.com/macros/s/AKfycbyMxGaRxSIz6BGyHzyBVXrIOwiiWlRqpNWwiz3y2HSN6hutCHVomiyaJkX9j97nwEen/exec";
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/16DoKYtmkU2_dCCpKrMHkXK20ZaRbopy2qqmv1b6-dTQ/edit";
+
+/* ============================================================
+   ESTADO
+============================================================ */
+let globalData = [];
+let datasetPeriodo = [];       // filtrado por período + operador
+let datasetFiltradoDashboard = []; // + origem + status
+let currentMode = 'daily';
+let selectedPeriod = '';
+let selectedPeriodLabel = '';
+let colMap = {};
+let chartOrigem = null, chartStatus = null, chartEvolucao = null;
+
+let taxaUSD = 5.50;
+fetch("https://economia.awesomeapi.com.br/last/USD-BRL")
+  .then(r => r.json())
+  .then(d => { if (d.USDBRL && d.USDBRL.ask) taxaUSD = parseFloat(d.USDBRL.ask); })
+  .catch(() => {});
+
+/* ============================================================
+   HELPERS
+============================================================ */
+function abrirTela(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function abrirManual() {
+  Swal.fire({
+    title:'Manual',
+    html:'<div style="text-align:left; font-size:14px; line-height:1.7">' +
+         '<b>📅 Diário</b> — escolha o <b>dia</b> no dropdown. Evolução: últimas <b>4 semanas</b> até esse dia.<br>' +
+         '<b>📆 Semanal</b> — escolha a <b>semana</b> (ex: <code>44w - 2026</code>). Evolução: últimas <b>4 semanas</b> até ela.<br>' +
+         '<b>🗓️ Mensal</b> — escolha o <b>mês</b>. Evolução: últimos <b>3 meses</b> até ele.<br><br>' +
+         'Os filtros de <b>Operador</b>, <b>Origem</b> e <b>Status</b> refinam KPIs, tabela e gráficos.<br>' +
+         'Valores em <b>USD</b> e <b>BRL</b> (cotação em tempo real).</div>',
+    icon:'info', confirmButtonColor:'#2D3277'
+  });
+}
+function fmtUSD(v){ return v.toLocaleString('en-US',{style:'currency',currency:'USD'}); }
+function fmtBRL(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function esc(v){ return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+function parseValor(v) {
+  if (!v) return 0;
+  return parseFloat(String(v).replace('R$','').replace(/\./g,'').replace(',','.').trim()) || 0;
+}
+function parseDataBR(s) {
+  if (!s) return null;
+  const p = String(s).trim().split(' ')[0].split('/');
+  if (p.length !== 3) return null;
+  const d = new Date(+p[2], +p[1]-1, +p[0]);
+  return isNaN(d.getTime()) ? null : d;
+}
+function formatDateBR(d) {
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+function getISOYearWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const isoYear = d.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return { isoYear, week };
+}
+function getISOWeeksInYear(year) {
+  const d = new Date(Date.UTC(year, 11, 28));
+  return getISOYearWeek(d).week;
+}
+function weekKey(date) {
+  const { isoYear, week } = getISOYearWeek(date);
+  return `${isoYear}-W${String(week).padStart(2,'0')}`;
+}
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+}
+function classStatus(txt) {
+  const t = (txt || '').toLowerCase();
+  if (/(aprovad|resolvid|conclu|sucesso|entregue|finalizad)/.test(t)) return 'st-ok';
+  if (/(pendente|aguard|an[aá]lise|aberto|andamento)/.test(t))      return 'st-warn';
+  if (/(recusad|cancel|erro|falha|negad)/.test(t))                  return 'st-bad';
+  return 'st-neu';
+}
+
+/* ============================================================
+   API
+============================================================ */
+async function callAPI(action, payload = {}) {
+  const loader = document.getElementById('loader-overlay');
+  loader.classList.add('show');
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, payload })
+    });
+    const data = await res.json();
+    if (data && data.erro) throw new Error(data.erro);
+    return data;
+  } catch (err) {
+    Swal.fire({ icon:'error', title:'Erro', text: err.message, confirmButtonColor:'#2D3277' });
+    throw err;
+  } finally {
+    loader.classList.remove('show');
+  }
+}
+
+/* ============================================================
+   DETECTAR COLUNAS
+============================================================ */
+function detectarColunas() {
+  if (!globalData.length) return;
+  const cols = Object.keys(globalData[0]);
+  const find = pat => cols.find(c => pat.test(c.toLowerCase().trim())) || null;
+  colMap = {
+    semana:    find(/semana|week/),
+    data:      find(/data|date/),
+    idpacote:  find(/id\s*do\s*pacote|id[_\s]?pacote|^pacote$/),
+    idavaria:  find(/id[_\s]?avaria|id\.\s*avaria/),
+    lancado:   find(/lan[cç]ado|problem\s*solver|solver/),
+    descricao: find(/descri/),
+    valor:     find(/valor/),
+    origem:    find(/origem/),
+    resolucao: find(/^resolu[cç][aã]o$/),
+    status:    find(/status/)
+  };
+}
+
+/* ============================================================
+   LOAD GLOBAL
+============================================================ */
+async function garantirDados() {
+  if (globalData.length > 0) return;
+  const resp = await callAPI('getAvarias');
+  globalData = resp.rows || [];
+  detectarColunas();
+}
+
+/* ============================================================
+   ABRIR DASHBOARD POR MODO
+============================================================ */
+async function abrirDashboard(mode) {
+  currentMode = mode;
+  abrirTela('screen-dashboard');
+
+  try { await garantirDados(); }
+  catch(e) {
+    document.querySelector('#table-ativos tbody').innerHTML =
+      `<tr><td colspan="6" style="text-align:center;color:#b91c1c;font-weight:700;padding:20px">${esc(e.message)}</td></tr>`;
+    return;
+  }
+
+  popularFiltroPeriodo(mode);
+  popularFiltroOperador();
+  popularFiltroOrigem();
+  popularFiltroStatus();
+  aplicarFiltrosDashboard();
+}
+
+/* ---- Período (dinâmico por modo) ---- */
+function popularFiltroPeriodo(mode) {
+  const sel = document.getElementById('filter-periodo');
+  const lbl = document.getElementById('filter-periodo-label');
+
+  if (mode === 'daily') {
+    lbl.innerText = 'Dia:';
+    const set = new Set();
+    globalData.forEach(r => {
+      const d = String(r[colMap.data]||'').trim().split(' ')[0];
+      if (d) set.add(d);
+    });
+    const arr = Array.from(set).sort((a,b) => {
+      const pa = a.split('/'), pb = b.split('/');
+      if (pa.length===3 && pb.length===3)
+        return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`) - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`);
+      return 0;
+    });
+    sel.innerHTML = arr.length
+      ? arr.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('')
+      : '<option value="">Sem datas</option>';
+    const hoje = formatDateBR(new Date());
+    sel.value = arr.includes(hoje) ? hoje : (arr[0] || '');
+
+  } else if (mode === 'weekly') {
+    lbl.innerText = 'Semana:';
+    const set = new Set();
+    globalData.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (d) set.add(weekKey(d));
+    });
+    const arr = Array.from(set).sort().reverse();
+    sel.innerHTML = arr.length
+      ? arr.map(k => {
+          const [y, w] = k.split('-W');
+          return `<option value="${esc(k)}">${parseInt(w)}w - ${esc(y)}</option>`;
+        }).join('')
+      : '<option value="">Sem semanas</option>';
+    const curKey = weekKey(new Date());
+    sel.value = arr.includes(curKey) ? curKey : (arr[0] || '');
+
+  } else {
+    lbl.innerText = 'Mês:';
+    const set = new Set();
+    globalData.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (d) set.add(monthKey(d));
+    });
+    const arr = Array.from(set).sort().reverse();
+    const nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    sel.innerHTML = arr.length
+      ? arr.map(k => {
+          const [y, m] = k.split('-');
+          return `<option value="${esc(k)}">${nomes[+m-1]}/${esc(y)}</option>`;
+        }).join('')
+      : '<option value="">Sem meses</option>';
+    const curKey = monthKey(new Date());
+    sel.value = arr.includes(curKey) ? curKey : (arr[0] || '');
+  }
+
+  selectedPeriod = sel.value;
+}
+
+/* ---- Operador ---- */
+function popularFiltroOperador() {
+  const wrap = document.getElementById('wrap-operador');
+  const sel  = document.getElementById('filter-operador');
+
+  if (!colMap.lancado) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+
+  const set = new Set();
+  globalData.forEach(r => {
+    const v = (r[colMap.lancado]||'').trim();
+    if (v) set.add(v);
+  });
+  const arr = Array.from(set).sort((a,b) => a.localeCompare(b));
+  sel.innerHTML = '<option value="TODOS">Todos</option>' +
+    arr.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  sel.value = 'TODOS';
+}
+
+/* ---- Origem / Status ---- */
+function popularFiltroOrigem() {
+  const sel = document.getElementById('filter-origem');
+  const set = new Set();
+  globalData.forEach(r => {
+    const v = (r[colMap.origem]||'').trim();
+    if (v) set.add(v);
+  });
+  const arr = Array.from(set).sort();
+  sel.innerHTML = '<option value="TODAS">Todas</option>' +
+    arr.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  sel.value = 'TODAS';
+}
+function popularFiltroStatus() {
+  const sel = document.getElementById('filter-status');
+  const set = new Set();
+  globalData.forEach(r => {
+    const v = (r[colMap.status]||'').trim();
+    if (v) set.add(v);
+  });
+  const arr = Array.from(set).sort();
+  sel.innerHTML = '<option value="TODOS">Todos</option>' +
+    arr.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+  sel.value = 'TODOS';
+}
+
+function resetarFiltros() {
+  document.getElementById('filter-operador').value = 'TODOS';
+  document.getElementById('filter-origem').value   = 'TODAS';
+  document.getElementById('filter-status').value   = 'TODOS';
+  aplicarFiltrosDashboard();
+}
+
+/* ============================================================
+   APLICAR FILTROS
+============================================================ */
+function aplicarFiltrosDashboard() {
+  const vPer  = document.getElementById('filter-periodo').value;
+  const vOp   = document.getElementById('filter-operador').value;
+  const vOrig = document.getElementById('filter-origem').value;
+  const vStat = document.getElementById('filter-status').value;
+
+  selectedPeriod = vPer;
+
+  /* === Filtro base: período + operador === */
+  datasetPeriodo = globalData.filter(r => {
+    let okPer = false;
+    if (currentMode === 'daily') {
+      okPer = String(r[colMap.data]||'').trim().split(' ')[0] === vPer;
+    } else if (currentMode === 'weekly') {
+      const d = parseDataBR(r[colMap.data]);
+      if (d) okPer = weekKey(d) === vPer;
+    } else {
+      const d = parseDataBR(r[colMap.data]);
+      if (d) okPer = monthKey(d) === vPer;
+    }
+    if (!okPer) return false;
+    if (vOp !== 'TODOS' && (r[colMap.lancado]||'').trim() !== vOp) return false;
+    return true;
+  });
+
+  /* === Filtro final: + origem + status === */
+  datasetFiltradoDashboard = datasetPeriodo.filter(r => {
+    const okOrig = vOrig === 'TODAS' || (r[colMap.origem]||'').trim() === vOrig;
+    const okStat = vStat === 'TODOS' || (r[colMap.status]||'').trim() === vStat;
+    return okOrig && okStat;
+  });
+
+  /* === Título === */
+  const titulos = { daily:'DIÁRIO', weekly:'SEMANAL', monthly:'MENSAL' };
+  const sel = document.getElementById('filter-periodo');
+  selectedPeriodLabel = sel.options[sel.selectedIndex]?.text || vPer;
+  const opLabel = vOp !== 'TODOS' ? ` • ${vOp}` : '';
+  document.getElementById('dashboard-title').innerText =
+    `AVARIAS ${titulos[currentMode]} — ${selectedPeriodLabel}${opLabel}`;
+
+  /* === KPIs === */
+  const qtd = datasetFiltradoDashboard.length;
+  const totalBRL = datasetFiltradoDashboard.reduce((a, r) => a + parseValor(r[colMap.valor]), 0);
+  const totalUSD = totalBRL / taxaUSD;
+  const ticketBRL = qtd ? totalBRL / qtd : 0;
+  const ticketUSD = ticketBRL / taxaUSD;
+  const maiorBRL = qtd ? Math.max(...datasetFiltradoDashboard.map(r => parseValor(r[colMap.valor]))) : 0;
+  const maiorUSD = maiorBRL / taxaUSD;
+
+  document.getElementById('kpi-total').innerText = qtd;
+  document.getElementById('kpi-valor').innerHTML  = `<div class="val-dolar-lg">${fmtUSD(totalUSD)}</div><div class="val-real-sm">${fmtBRL(totalBRL)}</div>`;
+  document.getElementById('kpi-ticket').innerHTML = `<div class="val-dolar-lg">${fmtUSD(ticketUSD)}</div><div class="val-real-sm">${fmtBRL(ticketBRL)}</div>`;
+  document.getElementById('kpi-maior').innerHTML  = `<div class="val-dolar-lg">${fmtUSD(maiorUSD)}</div><div class="val-real-sm">${fmtBRL(maiorBRL)}</div>`;
+
+  renderizarTabelaDashboard();
+  renderChartOrigem();
+  renderChartStatus();
+  renderChartEvolucao();
+}
+
+/* ============================================================
+   TABELA
+============================================================ */
+function renderizarTabelaDashboard() {
+  const tbody = document.querySelector('#table-ativos tbody');
+  tbody.innerHTML = '';
+  if (!datasetFiltradoDashboard.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:20px">Nenhum registro no período/filtros.</td></tr>';
+    return;
+  }
+
+  const sorted = [...datasetFiltradoDashboard].sort(
+    (a,b) => parseValor(b[colMap.valor]) - parseValor(a[colMap.valor])
+  );
+
+  sorted.slice(0, 100).forEach(r => {
+    const idp = (r[colMap.idpacote]||'-').trim();
+    const ida = (r[colMap.idavaria]||'').trim();
+    const v   = parseValor(r[colMap.valor]);
+    const st  = (r[colMap.status]||'-').trim();
+    const cls = classStatus(st);
+
+    const linkR = idp !== '-' ? `https://envios.adminml.com/logistics/package-management/package/${esc(idp)}` : '#';
+    const linkS = idp !== '-' ? `https://shipping-bo.adminml.com/sauron/shipments/shipment/${esc(idp)}` : '#';
+    const linkD = ida           ? `https://envios.adminml.com/logistics/problem-solving/detail/${esc(ida)}` : '#';
+
+    const icons = `
+      <span style="display:inline-flex;gap:6px;margin-right:6px">
+        ${idp !== '-' ? `<a href="${linkR}" target="_blank" title="Rastreio" style="color:#2D3277"><i class="fa-solid fa-magnifying-glass"></i></a>` : ''}
+        ${idp !== '-' ? `<a href="${linkS}" target="_blank" title="Sauron" style="color:#10b981"><i class="fa-solid fa-cube"></i></a>` : ''}
+        ${ida           ? `<a href="${linkD}" target="_blank" title="Avaria" style="color:#ef4444"><i class="fa-solid fa-box-open"></i></a>` : ''}
+      </span>`;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="id-badge">${icons}${esc(idp)}</span></td>
+      <td>${esc(r[colMap.data]||'-')}</td>
+      <td><b>${esc(r[colMap.lancado]||'-')}</b></td>
+      <td>${esc(r[colMap.origem]||'-')}</td>
+      <td><strong style="color:#111">${fmtUSD(v/taxaUSD)}</strong><br>
+          <span style="font-size:11px;color:#888">${fmtBRL(v)}</span></td>
+      <td><span class="status-pill ${cls}">${esc(st)}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ============================================================
+   GRÁFICOS SUPERIORES
+============================================================ */
+function renderChartOrigem() {
+  const agg = {};
+  datasetFiltradoDashboard.forEach(r => {
+    const o = (r[colMap.origem]||'Não definido').trim() || 'Não definido';
+    agg[o] = (agg[o]||0) + parseValor(r[colMap.valor]);
+  });
+  const ord = Object.entries(agg).sort((a,b) => b[1]-a[1]).slice(0,10);
+
+  const opts = {
+    chart: { type:'bar', height:300, toolbar:{show:false} },
+    plotOptions: { bar: { columnWidth:'55%', borderRadius:4 } },
+    series: [{ name:'Valor (R$)', data: ord.map(x=>Math.round(x[1])) }],
+    xaxis: { categories: ord.map(x=>x[0]), labels:{ style:{fontSize:'11px'} } },
+    colors: ['#FFD700'],
+    dataLabels: {
+      enabled:true, formatter: v => 'R$ ' + v.toLocaleString('pt-BR'),
+      style:{ fontSize:'11px', fontWeight:700, colors:['#2D3277'] }
+    },
+    grid: { borderColor:'#e5e7eb', strokeDashArray:3 }
+  };
+  if (!chartOrigem) {
+    chartOrigem = new ApexCharts(document.querySelector('#chart-origem'), opts);
+    chartOrigem.render();
+  } else {
+    chartOrigem.updateOptions(opts);
+  }
+}
+
+function renderChartStatus() {
+  const agg = {};
+  datasetFiltradoDashboard.forEach(r => {
+    const s = (r[colMap.status]||'Não definido').trim() || 'Não definido';
+    agg[s] = (agg[s]||0) + 1;
+  });
+
+  const opts = {
+    chart: { type:'donut', height:300 },
+    series: Object.values(agg),
+    labels: Object.keys(agg),
+    colors: ['#2D3277','#ea4335','#fbbc04','#34a853','#7c3aed','#0891b2'],
+    legend: { position:'bottom', fontSize:'12px' }
+  };
+  if (!chartStatus) {
+    chartStatus = new ApexCharts(document.querySelector('#chart-status'), opts);
+    chartStatus.render();
+  } else {
+    chartStatus.updateOptions(opts);
+  }
+}
+
+/* ============================================================
+   EVOLUÇÃO (rodapé) — termina no período selecionado
+============================================================ */
+function getLastNWeeksEndingAt(endKey, n) {
+  const [yStr, wStr] = endKey.split('-W');
+  let isoYear = +yStr, week = +wStr;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.unshift({ isoYear, week, key:`${isoYear}-W${String(week).padStart(2,'0')}`, label:`${week}w` });
+    week--;
+    if (week < 1) { isoYear--; week = getISOWeeksInYear(isoYear); }
+  }
+  return out;
+}
+function getLastNMonthsEndingAt(endKey, n) {
+  const [yStr, mStr] = endKey.split('-');
+  let y = +yStr, m = +mStr - 1;
+  const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.unshift({ y, m, key:`${y}-${String(m+1).padStart(2,'0')}`, label:`${nomes[m]}/${String(y).slice(2)}` });
+    m--;
+    if (m < 0) { m = 11; y--; }
+  }
+  return out;
+}
+
+function renderChartEvolucao() {
+  const vOrig = document.getElementById('filter-origem').value;
+  const vOp   = document.getElementById('filter-operador').value;
+
+  /* Base: globalData filtrado por origem + operador */
+  let source = globalData;
+  if (vOrig !== 'TODAS') source = source.filter(r => (r[colMap.origem]||'').trim() === vOrig);
+  if (vOp   !== 'TODOS') source = source.filter(r => (r[colMap.lancado]||'').trim() === vOp);
+
+  let labels = [], valores = [], qtds = [], titulo = '';
+
+  if (currentMode === 'monthly') {
+    const months = getLastNMonthsEndingAt(selectedPeriod, 3);
+    const map = {}; months.forEach(m => map[m.key] = { valor:0, qtd:0 });
+    source.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (!d) return;
+      const k = monthKey(d);
+      if (map[k]) { map[k].valor += parseValor(r[colMap.valor]); map[k].qtd += 1; }
+    });
+    labels  = months.map(m => m.label);
+    valores = months.map(m => Math.round(map[m.key].valor));
+    qtds    = months.map(m => map[m.key].qtd);
+    titulo  = `Evolução Mensal — últimos 3 meses até ${selectedPeriodLabel}`;
+
+  } else {
+    /* Para DIÁRIO, a semana de referência é a do dia selecionado */
+    let endWeekKey = selectedPeriod;
+    if (currentMode === 'daily') {
+      const selDate = parseDataBR(selectedPeriod);
+      if (selDate) endWeekKey = weekKey(selDate);
+    }
+
+    const weeks = getLastNWeeksEndingAt(endWeekKey, 4);
+    const map = {}; weeks.forEach(w => map[w.key] = { valor:0, qtd:0 });
+    source.forEach(r => {
+      const d = parseDataBR(r[colMap.data]);
+      if (!d) return;
+      const k = weekKey(d);
+      if (map[k]) { map[k].valor += parseValor(r[colMap.valor]); map[k].qtd += 1; }
+    });
+    labels  = weeks.map(w => w.label);
+    valores = weeks.map(w => Math.round(map[w.key].valor));
+    qtds    = weeks.map(w => map[w.key].qtd);
+    titulo  = currentMode === 'daily'
+      ? `Evolução Semanal — 4 semanas até ${selectedPeriod}`
+      : `Evolução Semanal — 4 semanas até ${selectedPeriodLabel}`;
+  }
+
+  document.getElementById('chart-evolucao-title').innerText = titulo;
+
+  const opts = {
+    chart: { type:'bar', height:280, toolbar:{show:false} },
+    series: [{ name:'Valor (R$)', data: valores }],
+    plotOptions: { bar: { columnWidth:'50%', borderRadius:4 } },
+    colors: ['#2D3277'],
+    dataLabels: {
+      enabled:true, offsetY:-22,
+      formatter: (v, opt) => `R$ ${v.toLocaleString('pt-BR')} • ${qtds[opt.dataPointIndex]} un.`,
+      style: { fontSize:'11px', fontWeight:700, colors:['#2D3277'] }
+    },
+    xaxis: { categories: labels, labels:{ style:{ fontWeight:700, colors:'#475569' } } },
+    yaxis: { labels:{ formatter: v => 'R$ ' + v.toLocaleString('pt-BR') } },
+    grid: { borderColor:'#e5e7eb', strokeDashArray:3 }
+  };
+
+  if (!chartEvolucao) {
+    chartEvolucao = new ApexCharts(document.querySelector('#chart-evolucao'), opts);
+    chartEvolucao.render();
+  } else {
+    chartEvolucao.updateOptions(opts);
+  }
+}
+
+/* ============================================================
+   EXPORTAR / WHATSAPP
+============================================================ */
+function baixarImagem() {
+  if (!datasetFiltradoDashboard.length) {
+    return Swal.fire('Aviso','Sem dados para exportar.','warning');
+  }
+  document.getElementById('loader-overlay').classList.add('show');
+  document.body.classList.add('exporting-mode');
+
+  setTimeout(() => {
+    html2canvas(document.getElementById('capture-area'), { scale:2, useCORS:true })
+      .then(canvas => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        a.download = `Avarias_${currentMode}_${selectedPeriod.replace(/[^\w-]/g,'_')}.png`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        document.body.classList.remove('exporting-mode');
+        document.getElementById('loader-overlay').classList.remove('show');
+      })
+      .catch(() => {
+        document.body.classList.remove('exporting-mode');
+        document.getElementById('loader-overlay').classList.remove('show');
+        Swal.fire('Erro','Falha ao gerar imagem.','error');
+      });
+  }, 400);
+}
+
+function copiarResumoWhatsApp() {
+  if (!datasetFiltradoDashboard.length) {
+    return Swal.fire('Aviso','Sem dados para copiar.','warning');
+  }
+
+  const hora = new Date().getHours();
+  const saud = hora >= 18 ? 'Boa Noite' : hora >= 12 ? 'Boa Tarde' : 'Bom Dia';
+
+  const qtd    = datasetFiltradoDashboard.length;
+  const totalB = datasetFiltradoDashboard.reduce((a,r) => a + parseValor(r[colMap.valor]), 0);
+  const totalU = totalB / taxaUSD;
+  const ticketB = qtd ? totalB/qtd : 0;
+  const ticketU = ticketB / taxaUSD;
+
+  const aprov = datasetFiltradoDashboard.filter(r => /aprovad|resolvid|conclu/i.test(String(r[colMap.status]||''))).length;
+  const pctAprov = qtd ? ((aprov/qtd)*100).toFixed(1) : '0.0';
+
+  const porOrig = {};
+  datasetFiltradoDashboard.forEach(r => {
+    const o = (r[colMap.origem]||'Não definido').trim() || 'Não definido';
+    if (!porOrig[o]) porOrig[o] = { qtd:0, valor:0 };
+    porOrig[o].qtd += 1;
+    porOrig[o].valor += parseValor(r[colMap.valor]);
+  });
+  const topOrig = Object.entries(porOrig).sort((a,b) => b[1].valor - a[1].valor)[0];
+
+  const opSel = document.getElementById('filter-operador').value;
+
+  let titulo = '';
+  if (currentMode === 'daily')   titulo = `📊 *Avarias — DIÁRIO (${selectedPeriodLabel})*`;
+  if (currentMode === 'weekly')  titulo = `📊 *Avarias — SEMANAL (${selectedPeriodLabel})*`;
+  if (currentMode === 'monthly') titulo = `📊 *Avarias — MENSAL (${selectedPeriodLabel})*`;
+
+  let msg = `${titulo}\n`;
+  if (opSel !== 'TODOS') msg += `👤 *Operador:* ${opSel}\n`;
+  msg += `\n${saud}!\n\n`;
+  msg += `🔹 *Qtd de Pacotes:* ${qtd}\n`;
+  msg += `💰 *Valor Total:* ${fmtUSD(totalU)} (${fmtBRL(totalB)})\n`;
+  msg += `🎯 *Ticket Médio:* ${fmtUSD(ticketU)} (${fmtBRL(ticketB)})\n`;
+  msg += `✅ *Taxa Aprovação:* ${pctAprov}%\n`;
+
+  if (topOrig) {
+    msg += `\n🏆 *Maior Ofensor:*\n${topOrig[0]} — ${topOrig[1].qtd} pacotes • ${fmtUSD(topOrig[1].valor/taxaUSD)} (${fmtBRL(topOrig[1].valor)})`;
+  }
+
+  navigator.clipboard.writeText(msg)
+    .then(() => Swal.fire({ icon:'success', title:'Copiado!', text:'Resumo pronto para o WhatsApp.', confirmButtonColor:'#2D3277' }));
+}
+</script>
+</body>
+</html>

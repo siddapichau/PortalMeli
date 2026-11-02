@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Painel Admin · Portal Interno</title>
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+<style>
+:root{--yellow:#ffe600;--blue:#2d3277;--bg:#f4f5f8;--ink:#262a35;--muted:#707789;--line:#e2e5ec;--red:#c62828;--green:#167442}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink)}button,input,select{font:inherit}button{cursor:pointer}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:15px;padding:15px clamp(15px,4vw,32px);background:var(--yellow);box-shadow:0 1px 5px #0001}header h1{font-size:18px}header p{font-size:11px;margin-top:3px}header .back{border:0;border-radius:8px;background:#292929;color:white;padding:10px 13px;font-size:12px;font-weight:800}
+main{max-width:1250px;margin:0 auto;padding:25px clamp(12px,3vw,28px)}.notice{padding:13px 15px;background:#fffbea;border:1px solid #f1e7a0;border-radius:10px;font-size:12px;line-height:1.6;margin-bottom:18px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.tab{border:1px solid var(--line);border-radius:8px;background:white;padding:10px 15px;font-size:12px;font-weight:800}.tab.active{background:var(--blue);color:white;border-color:var(--blue)}
+.panel{background:white;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px #00000006}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid var(--line)}.panel-head h2{font-size:15px}.primary,.secondary,.danger{border:0;border-radius:8px;padding:10px 13px;font-size:11px;font-weight:850}.primary{background:var(--yellow);color:#222}.secondary{background:#e9ecf5;color:var(--blue)}.danger{background:#fff0f0;color:var(--red)}
+.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:680px}th,td{padding:12px 14px;text-align:left;border-bottom:1px solid #edf0f4;font-size:12px;vertical-align:middle}th{background:#fafbfc;color:#697083;font-size:10px;text-transform:uppercase;letter-spacing:.5px}tbody tr:hover{background:#fafbff}#pagesBody tr{cursor:grab}#pagesBody tr.dragging{opacity:.45;background:#fff8bf}#pagesBody tr.dragover{outline:2px dashed #2d3277}.tag{display:inline-block;padding:4px 7px;border-radius:5px;background:#eceef5;color:#50586e;font-size:9px;font-weight:850}.tag.admin{background:#fff5b5;color:#6a5900}.tag.active{background:#e1f6e9;color:#176b3a}.tag.inactive{background:#ffe7e7;color:#9e2222}.actions{display:flex;gap:6px;flex-wrap:wrap}.small{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:white;font-size:10px;font-weight:750}
+.empty{padding:25px;text-align:center;color:var(--muted);font-size:12px}.permission-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:16px}.permission-controls label{font-size:12px;font-weight:750}.permission-controls select{min-width:240px;padding:10px;border:1px solid var(--line);border-radius:8px;background:white}.save-row{display:flex;justify-content:flex-end;padding:14px 16px;border-top:1px solid var(--line)}
+.toastbox{position:fixed;right:16px;bottom:16px;z-index:30;display:grid;gap:8px;width:min(340px,calc(100vw - 32px))}.toast{padding:12px 14px;background:#292929;color:white;border-radius:8px;font-size:12px;box-shadow:0 4px 18px #0002}.toast.error{background:#b42318}.toast.success{background:#167442}
+.modal-backdrop{position:fixed;inset:0;z-index:20;background:#111a;display:none;align-items:center;justify-content:center;padding:15px}.modal-backdrop.open{display:flex}.modal{width:min(100%,500px);max-height:92vh;overflow:auto;background:white;border-radius:14px;box-shadow:0 20px 70px #0004}.modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)}.modal-head h2{font-size:16px}.close{border:0;background:transparent;font-size:23px}.modal-body{padding:18px 20px}.field{margin-bottom:14px}.field label{display:block;font-size:11px;font-weight:800;margin-bottom:6px}.field input,.field select{width:100%;padding:11px;border:1px solid #dfe3ec;border-radius:8px;font-size:12px;background:white}.field input:focus,.field select:focus{outline:2px solid #b4baff}.field small{display:block;color:var(--muted);font-size:10px;margin-top:5px}.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.checkline{display:flex;align-items:center;gap:8px;font-size:12px;margin:10px 0}.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--line)}
+
+/* MELHORIA NA SELEÇÃO DE EMAIL */
+.email-header-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.email-list-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:10px;max-height:250px;overflow-y:auto;padding:10px;border:1px solid #dfe3ec;border-radius:8px;background:#fafbfc}
+.email-card{display:flex;align-items:center;gap:10px;padding:10px;background:white;border:1px solid #e2e5ec;border-radius:8px;cursor:pointer;transition:all 0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.02);margin:0}
+.email-card:hover{border-color:var(--blue);box-shadow:0 2px 5px rgba(45,50,119,0.1)}
+.email-card input[type="checkbox"]{width:18px;height:18px;accent-color:var(--blue);cursor:pointer;flex-shrink:0}
+.email-card-info{display:flex;flex-direction:column;overflow:hidden}
+.email-card-name{font-size:12px;font-weight:700;color:#333;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.email-card-email{font-size:10px;color:#777;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.email-card.selected{background:#f0f4ff;border-color:var(--blue)}
+#emailEditor{height:200px;background:white;border-radius:8px;font-family:inherit;font-size:13px}
+@media(max-width:600px){header h1{font-size:15px}.two{grid-template-columns:1fr}.panel-head{align-items:flex-start;flex-direction:column}main{padding-top:15px}}
+</style></head>
+<body>
+<header><div><h1><img src="https://upload.wikimedia.org/wikipedia/pt/0/04/Logotipo_MercadoLivre.png" alt="Mercado Livre" style="height:30px;width:auto;vertical-align:middle;margin-right:10px">Painel Administrativo</h1><p>Gerenciamento de usuários, páginas e permissões</p></div><button class="back" id="backButton">← Voltar ao Portal</button></header>
+<main>
+<div class="notice"><strong>Área restrita.</strong> As operações administrativas são autorizadas pela API. Cadastre apenas páginas e endereços confiáveis. Alterações de permissão entram em vigor nas próximas chamadas à API.</div>
+<nav class="tabs" aria-label="Seções administrativas">
+  <button class="tab active" data-tab="users">Usuários</button>
+  <button class="tab" data-tab="requests">Solicitações</button>
+  <button class="tab" data-tab="menus">Menus</button>
+  <button class="tab" data-tab="pages">Páginas</button>
+  <button class="tab" data-tab="permissions">Permissões</button>
+  <button class="tab" data-tab="email">Disparar E-mail</button>
+  <button class="tab" data-tab="home">Página inicial</button>
+  <button class="tab" data-tab="maintenance">Manutenção</button>
+</nav>
+
+<section class="panel" id="usersPanel"><div class="panel-head"><h2>Usuários cadastrados</h2><button class="primary" id="newUser">＋ Novo usuário</button></div><div class="tablewrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Ações</th></tr></thead><tbody id="usersBody"></tbody></table></div><div class="empty" id="usersEmpty" hidden>Nenhum usuário cadastrado.</div></section>
+
+<section class="panel" id="requestsPanel" hidden><div class="panel-head"><h2>Solicitações de Acesso</h2><button class="primary" id="refreshRequests">↻ Atualizar</button></div><div class="tablewrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Data</th><th>Ações</th></tr></thead><tbody id="requestsBody"></tbody></table></div><div class="empty" id="requestsEmpty" hidden>Nenhuma solicitação pendente.</div></section>
+
+<section class="panel" id="menusPanel" hidden><div class="panel-head"><h2>Menus do Portal</h2><button class="primary" id="newMenu">＋ Criar Menu</button></div><div class="tablewrap"><table><thead><tr><th>Ícone</th><th>Nome do Menu</th><th>Ordem</th><th>Ações</th></tr></thead><tbody id="menusBody"></tbody></table></div><div class="empty" id="menusEmpty" hidden>Nenhum menu cadastrado.</div></section>
+
+<section class="panel" id="pagesPanel" hidden><div class="panel-head"><h2>Páginas e organização do menu</h2><span style="font-size:11px;color:#707789">Arraste as linhas para ordenar.</span><button class="primary" id="newPage">＋ Nova página</button></div><div class="tablewrap"><table><thead><tr><th>Nome</th><th>Arquivo</th><th>Menu</th><th>Submenu</th><th>Status</th><th>Ações</th></tr></thead><tbody id="pagesBody"></tbody></table></div><div class="empty" id="pagesEmpty" hidden>Nenhuma página cadastrada.</div></section>
+
+<section class="panel" id="permissionsPanel" hidden><div class="panel-head"><h2>Permissões por usuário</h2><span style="font-size:11px;color:#707789">Editar exige permissão de visualização.</span></div><div class="permission-controls"><label for="permissionUser">Usuário</label><select id="permissionUser"><option value="">Carregando usuários...</option></select><button class="secondary" id="loadPermissions">Carregar permissões</button></div><div class="tablewrap"><table><thead><tr><th>Página</th><th>Status</th><th>Pode ver</th><th>Pode editar</th></tr></thead><tbody id="permissionsBody"></tbody></table></div><div class="empty" id="permissionsEmpty">Selecione um usuário para carregar as permissões.</div><div class="save-row"><button class="primary" id="savePermissions">Salvar permissões</button></div></section>
+
+<section class="panel" id="emailPanel" hidden>
+  <div class="panel-head"><h2>Disparar E-mail em Massa</h2><span style="font-size:11px;color:#707789">Envie e-mails formatados para vários usuários.</span></div>
+  <div style="padding:18px; display:flex; flex-direction:column; gap:15px;">
+    <div class="field">
+      <div class="email-header-row">
+        <label style="margin-bottom:0;">Selecionar Destinatários</label>
+        <label class="checkline" style="margin:0;font-size:11px;cursor:pointer;"><input type="checkbox" id="selectAllUsers"> Selecionar Todos</label>
+      </div>
+      <div class="email-list-grid" id="emailUsersList"></div>
+    </div>
+    <div class="field">
+      <label for="emailSubject">Assunto do E-mail</label>
+      <input id="emailSubject" placeholder="Ex: Atualizações importantes no Portal" required>
+    </div>
+    <div class="field">
+      <label>Mensagem</label>
+      <div id="emailEditor"></div>
+    </div>
+    <div style="display:flex; justify-content:flex-end;">
+      <button class="primary" id="sendBulkEmail" style="padding:12px 20px; font-size:13px;">📤 Disparar E-mails</button>
+    </div>
+  </div>
+</section>
+
+<section class="panel" id="homePanel" hidden>
+  <div class="panel-head"><h2>Conteúdo da página inicial</h2><span style="font-size:11px;color:#707789">Configuração sincronizada via API.</span></div>
+  <div style="padding:18px">
+    <div class="field"><label for="homeTitle">Título</label><input id="homeTitle" maxlength="120" value="Bem-vindo ao Portal"></div>
+    <div class="field"><label for="homeIntro">Texto de apresentação</label><input id="homeIntro" maxlength="500" value="Acesse ferramentas, novidades e informações operacionais em um só lugar."></div>
+    <div class="field"><label for="homeNews">Aviso de destaque</label><input id="homeNews" maxlength="180" value="Últimas novidades e atualizações logísticas"></div>
+    
+    <div class="field" style="margin-top:20px;background:#f9f9f9;padding:15px;border-radius:8px;border:1px solid #eee;">
+      <label style="font-size:13px;margin-bottom:10px;display:block;">Blocos de Conteúdo (Cards)</label>
+      <div id="homeBlocksList" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <button type="button" class="secondary" id="addHomeBlock" style="margin-top:10px;">＋ Adicionar novo bloco</button>
+    </div>
+    
+    <button class="primary" id="saveHome" style="margin-top:20px;">Salvar página inicial</button>
+  </div>
+</section>
+
+<section class="panel" id="maintenancePanel" hidden><div class="panel-head"><h2>Manutenção do portal</h2></div><div style="padding:18px"><h3 style="font-size:14px;margin-bottom:8px">Limpar cache local e sair</h3><p style="font-size:12px;color:#707789;line-height:1.6;margin-bottom:14px">Remove todos os dados locais, caches e encerra a sessão atual. O usuário será redirecionado para a tela de login.</p><button class="danger" id="clearCache">Limpar cache e Sair</button><p style="font-size:11px;color:#707789;margin-top:12px">Isso não apaga dados da planilha, apenas dados salvos no navegador.</p></div></section>
+</main>
+
+<div class="modal-backdrop" id="modalBackdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-head"><h2 id="modalTitle">Novo cadastro</h2><button class="close" id="closeModal" aria-label="Fechar">×</button></div><form id="modalForm"><div class="modal-body" id="modalBody"></div><div class="modal-foot"><button class="secondary" type="button" id="cancelModal">Cancelar</button><button class="primary" type="submit" id="modalSave">Salvar</button></div></form></section></div>
+<div class="toastbox" id="toastbox" aria-live="polite"></div>
+
+<datalist id="icones">
+  <!-- Logística -->
+  <option value="🚚"></option>
+  <option value="📦"></option>
+  <option value="📍"></option>
+  <option value="🏭"></option>
+  <option value="⏱️"></option>
+  <option value="🗺️"></option>
+  <option value="🛒"></option>
+  <option value="🏷️"></option>
+  <!-- Análise -->
+  <option value="📈"></option>
+  <option value="📉"></option>
+  <option value="📊"></option>
+  <option value="🧮"></option>
+  <option value="🔍"></option>
+  <option value="🧠"></option>
+  <option value="📋"></option>
+  <option value="📝"></option>
+  <!-- Site / Web -->
+  <option value="🌐"></option>
+  <option value="💻"></option>
+  <option value="🖥️"></option>
+  <option value="🏠"></option>
+  <option value="🔗"></option>
+  <option value="📱"></option>
+  <option value="🔒"></option>
+  <!-- Administração -->
+  <option value="⚙️"></option>
+  <option value="👥"></option>
+  <option value="👤"></option>
+  <option value="🛡️"></option>
+  <option value="🗂️"></option>
+  <option value="🚨"></option>
+  <option value="📅"></option>
+  <option value="🔔"></option>
+  <option value="⚡"></option>
+</datalist>
+
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const DEFAULT_API="https://script.google.com/macros/s/AKfycbxHUc58l6dqttLAGaAkPdK5IQxIAMCeOQwMlso0lmiCasjurGlammjV2rTgJTqPQStq/exec";localStorage.setItem("apiUrl",DEFAULT_API);const API=()=>DEFAULT_API,TOKEN=()=>localStorage.getItem("token");
+let currentUser=null,users=[],pages=[],menus=[],editing=null,modalType=null,permissions=[];
+let quill;
+
+if (window.self !== window.top) {
+  document.querySelector("header").style.display = "none";
+  document.querySelector("main").style.paddingTop = "25px";
+}
+
+function redirect(page){location.replace(page)}
+async function call(action,payload={}){
+ const controller = new AbortController();
+ const timeout = setTimeout(() => controller.abort(), 15000);
+ try {
+   const res=await fetch(API(),{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,token:TOKEN(),...payload}), signal: controller.signal});
+   if(!res.ok)throw Error("Erro HTTP "+res.status+" na API.");
+   const r=await res.json();if(!r.ok)throw Error(r.error||"A operação falhou.");return r.data??r;
+ } finally {
+   clearTimeout(timeout);
+ }
+}
+function toast(msg,type="success"){const d=document.createElement("div");d.className="toast "+type;d.textContent=msg;$("toastbox").append(d);setTimeout(()=>d.remove(),4000)}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+async function guard(){
+ localStorage.setItem("apiUrl",DEFAULT_API);if(!TOKEN()){redirect("login.html");return false}
+ try{const r=await call("validarToken");currentUser=r.data||r;if(String(currentUser.perfil).toLowerCase()!=="admin"){redirect("portal.html");return false}return true}
+ catch(e){localStorage.removeItem("token");redirect("login.html");return false}
+}
+function switchTab(tab){
+ document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+ $("usersPanel").hidden=tab!=="users";$("requestsPanel").hidden=tab!=="requests";$("menusPanel").hidden=tab!=="menus";$("pagesPanel").hidden=tab!=="pages";$("permissionsPanel").hidden=tab!=="permissions";$("homePanel").hidden=tab!=="home";$("maintenancePanel").hidden=tab!=="maintenance";$("emailPanel").hidden=tab!=="email";
+ if(tab==="requests") loadRequests();
+ if(tab==="menus") loadMenus();
+ if(tab==="home") loadHomeSettings();
+ if(tab==="email") initEmailTab();
+}
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+
+$("backButton").addEventListener("click",()=>{
+  if (window.self !== window.top) {
+    window.top.location.href = "portal.html";
+  } else {
+    redirect("portal.html");
+  }
+});
+
+async function loadUsers(){
+ users=await call("listarUsuarios");if(!Array.isArray(users))users=[];
+ const body=$("usersBody");body.replaceChildren();$("usersEmpty").hidden=users.length>0;
+ users.forEach(u=>{
+  const tr=document.createElement("tr");
+  const profile=String(u.perfil||"user").toLowerCase();
+  tr.innerHTML=`<td>${esc(u.nome)}</td><td>${esc(u.email)}</td><td><span class="tag ${profile==="admin"?"admin":""}">${esc(profile.toUpperCase())}</span></td><td><span class="tag ${u.ativo?"active":"inactive"}">${u.ativo?"ATIVO":"INATIVO"}</span></td><td><div class="actions"><button class="small" data-edit="${esc(u.id)}">Editar</button><button class="small" data-delete="${esc(u.id)}">Excluir</button></div></td>`;
+  body.append(tr);
+ });
+ body.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>openUserModal(users.find(u=>u.id===b.dataset.edit))));
+ body.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",()=>deleteUser(b.dataset.delete)));
+ populatePermissionUsers();
+}
+
+async function loadMenus(){
+ menus=await call("listarMenus"); if(!Array.isArray(menus)) menus=[];
+ const body=$("menusBody");body.replaceChildren();$("menusEmpty").hidden=menus.length>0;
+ menus.forEach(m=>{
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td><span style="font-size:20px">${esc(m.icone)}</span></td><td>${esc(m.nome)}</td><td>${m.ordem}</td><td><div class="actions"><button class="small" data-edit="${esc(m.id)}">Editar</button><button class="small" data-delete="${esc(m.id)}">Excluir</button></div></td>`;
+  body.append(tr);
+ });
+ body.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>openMenuModal(menus.find(m=>m.id===b.dataset.edit))));
+ body.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",()=>deleteMenu(b.dataset.delete)));
+}
+
+async function loadRequests(){
+ try {
+  const reqs = await call("listarSolicitacoes");
+  const body = $("requestsBody"); body.replaceChildren();
+  $("requestsEmpty").hidden = reqs.length > 0;
+  if(!Array.isArray(reqs)) return;
+  reqs.forEach(r => {
+   const tr = document.createElement("tr");
+   tr.innerHTML = `<td>${esc(r.nome)}</td><td>${esc(r.email)}</td><td>${new Date(r.criadoEm).toLocaleDateString('pt-BR')}</td><td><div class="actions"><button class="small" style="color:var(--green)" data-approve="${esc(r.id)}">Aprovar</button><button class="small" style="color:var(--red)" data-reject="${esc(r.id)}">Rejeitar</button></div></td>`;
+   body.append(tr);
+  });
+  body.querySelectorAll("[data-approve]").forEach(b => b.addEventListener("click", () => approveRequest(b.dataset.approve)));
+  body.querySelectorAll("[data-reject]").forEach(b => b.addEventListener("click", () => rejectRequest(b.dataset.reject)));
+ } catch(e) { toast(e.message, "error"); }
+}
+
+async function approveRequest(id) {
+ if(!confirm("Aprovar esta solicitação e criar o usuário?")) return;
+ try {
+  await call("aprovarSolicitacao", { id });
+  toast("Solicitação aprovada e usuário criado.");
+  await loadRequests();
+  await loadUsers();
+ } catch(e) { toast(e.message, "error"); }
+}
+
+async function rejectRequest(id) {
+ if(!confirm("Rejeitar esta solicitação?")) return;
+ try {
+  await call("excluirSolicitacao", { id });
+  toast("Solicitação rejeitada.");
+  await loadRequests();
+ } catch(e) { toast(e.message, "error"); }
+}
+
+$("refreshRequests").addEventListener("click", loadRequests);
+
+async function loadPages(){
+ pages=await call("listarPaginasAdmin");if(!Array.isArray(pages))pages=[];
+ const body=$("pagesBody");body.replaceChildren();$("pagesEmpty").hidden=pages.length>0;
+ pages.forEach(p=>{
+  const tr=document.createElement("tr");tr.draggable=true;tr.dataset.pageId=p.id;tr.style.cursor="grab";
+  tr.innerHTML=`<td><span title="Arraste para ordenar" style="color:#9299aa;margin-right:8px">⠿</span>${esc(p.icone||"📄")} ${esc(p.nome)}</td><td>${esc(p.arquivo)}</td><td>${esc(p.menu)}</td><td>${esc(p.submenu||"-")}</td><td><span class="tag ${p.ativo?"active":"inactive"}">${p.ativo?"ATIVA":"INATIVA"}</span></td><td><div class="actions"><button class="small" data-edit="${esc(p.id)}">Editar</button><button class="small" data-delete="${esc(p.id)}">Excluir</button></div></td>`;
+  body.append(tr);
+ });
+ let dragged=null;
+ body.querySelectorAll("tr[draggable]").forEach(row=>{
+  row.addEventListener("dragstart",e=>{dragged=row;row.style.opacity=".45";e.dataTransfer.effectAllowed="move"});
+  row.addEventListener("dragend",()=>{row.style.opacity="1";dragged=null});
+  row.addEventListener("dragover",e=>{e.preventDefault();e.dataTransfer.dropEffect="move"});
+  row.addEventListener("drop",async e=>{e.preventDefault();if(!dragged||dragged===row)return;const rows=[...body.querySelectorAll("tr")];const from=rows.indexOf(dragged),to=rows.indexOf(row);body.insertBefore(dragged,from<to?row.nextSibling:row);try{const ordered=[...body.querySelectorAll("tr")];for(let i=0;i<ordered.length;i++){const pg=pages.find(x=>x.id===ordered[i].dataset.pageId);if(pg)await call("salvarPagina",{...pg,ordem:(i+1)*10})}toast("Ordem do menu salva.");await loadPages()}catch(err){toast("Falha ao salvar ordem: "+err.message,"error")}});
+ });
+ body.querySelectorAll("[data-edit]").forEach(b=>b.addEventListener("click",()=>openPageModal(pages.find(p=>p.id===b.dataset.edit))));
+ body.querySelectorAll("[data-delete]").forEach(b=>b.addEventListener("click",()=>deletePage(b.dataset.delete)));
+}
+
+function populatePermissionUsers(){
+ const select=$("permissionUser"),old=select.value;select.replaceChildren();
+ const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="Selecione um usuário";select.append(placeholder);
+ users.forEach(u=>{const o=document.createElement("option");o.value=u.email;o.textContent=u.nome+" ("+u.email+")";select.append(o)});
+ if(users.some(u=>u.email===old))select.value=old;
+}
+
+function openModal(type,title,bodyHtml,record=null){
+ modalType=type;editing=record;$("modalTitle").textContent=title;$("modalBody").innerHTML=bodyHtml;$("modalBackdrop").classList.add("open");
+ $("modalBody").querySelectorAll("[data-field]").forEach(el=>{const key=el.dataset.field;if(record&&record[key]!==undefined){if(el.type==="checkbox")el.checked=Boolean(record[key]);else el.value=record[key]??""}});
+ const first=$("modalBody").querySelector("input,select");if(first)first.focus();
+}
+function closeModal(){$("modalBackdrop").classList.remove("open");$("modalBody").replaceChildren();editing=null;modalType=null}
+$("closeModal").addEventListener("click",closeModal);$("cancelModal").addEventListener("click",closeModal);
+$("modalBackdrop").addEventListener("click",e=>{if(e.target===$("modalBackdrop"))closeModal()});
+
+function openUserModal(user=null){
+ const isEdit=Boolean(user);
+ openModal("user",isEdit?"Editar usuário":"Novo usuário",`
+ <div class="field"><label for="fNome">Nome</label><input id="fNome" data-field="nome" required maxlength="120"></div>
+ <div class="field"><label for="fEmail">E-mail</label><input id="fEmail" data-field="email" required type="text" ${isEdit?"readonly":""} maxlength="180"></div>
+ <div class="field"><label for="fSenha">Senha ${isEdit?"(deixe em branco para manter)":"(obrigatória, mínimo 8 caracteres)"}</label><input id="fSenha" type="password" ${isEdit?"":"required"} minlength="8" autocomplete="new-password" placeholder="${isEdit?"Nova senha (opcional)":"Digite a senha"}"></div>
+ <div class="two"><div class="field"><label for="fPerfil">Perfil</label><select id="fPerfil" data-field="perfil"><option value="user">Usuário</option><option value="admin">Administrador</option></select></div>
+ <div class="field"><label>Status</label><label class="checkline"><input id="fAtivo" type="checkbox" data-field="ativo" checked> Usuário ativo</label></div></div>
+ `,user);
+}
+
+function openMenuModal(menu=null){
+ const isEdit=Boolean(menu);
+ openModal("menu",isEdit?"Editar Menu":"Novo Menu",`
+ <div class="field"><label for="fMenuNome">Nome do Menu</label><input id="fMenuNome" data-field="nome" required maxlength="50" placeholder="Ex.: Análise, Administração"></div>
+ <div class="two">
+   <div class="field"><label for="fMenuIcone">Ícone</label><input id="fMenuIcone" list="icones" data-field="icone" placeholder="▦" maxlength="12"></div>
+   <div class="field"><label for="fMenuOrdem">Ordem</label><input id="fMenuOrdem" data-field="ordem" type="number" value="0"></div>
+ </div>
+ `,menu);
+}
+
+function openPageModal(page=null){
+ const isEdit=Boolean(page);
+ const menuOptions = menus.map(m => `<option value="${esc(m.nome)}">${esc(m.icone)} ${esc(m.nome)}</option>`).join('');
+ 
+ openModal("page",isEdit?"Editar página":"Nova página",`
+ <div class="field"><label for="fNome">Nome da página</label><input id="fNome" data-field="nome" required maxlength="120"></div>
+ <div class="two"><div class="field"><label for="fArquivo">Arquivo HTML</label><input id="fArquivo" data-field="arquivo" placeholder="exemplo.html"></div><div class="field"><label for="fIcone">Ícone</label><input id="fIcone" list="icones" data-field="icone" placeholder="📊" maxlength="12"></div></div>
+ <div class="field"><label for="fUrl">URL externa (opcional)</label><input id="fUrl" data-field="url" type="url" placeholder="https://..."><small>Se preenchida, a URL será usada em vez do arquivo.</small></div><div class="field"><label for="fDescricao">Descrição curta / resumo da atualização</label><input id="fDescricao" data-field="descricao" maxlength="220" placeholder="Ex.: Novo painel de análise e correções no relatório."><small>Será usada no bloco de últimas atualizações do portal.</small></div>
+ <div class="two"><div class="field"><label for="fMenu">Menu principal (Obrigatório)</label><select id="fMenu" data-field="menu" required><option value="">Selecione...</option>${menuOptions}</select></div><div class="field"><label for="fSubmenu">Submenu (opcional)</label><input id="fSubmenu" data-field="submenu" placeholder="Ex.: BPP 2026"><small>Opcional. O caminho será Análise › BPP 2026.</small></div></div>
+ <div class="two"><div class="field"><label for="fOrdem">Ordem (dentro do menu)</label><input id="fOrdem" data-field="ordem" type="number" value="0"></div><div class="field"><label>Status</label><label class="checkline"><input id="fAtivo" type="checkbox" data-field="ativo" checked> Página ativa</label></div></div>
+ `,page);
+}
+$("newUser").addEventListener("click",()=>openUserModal());
+$("newMenu").addEventListener("click",()=>openMenuModal());
+$("newPage").addEventListener("click",()=>openPageModal());
+
+$("modalForm").addEventListener("submit",async e=>{
+ e.preventDefault();const btn=$("modalSave");btn.disabled=true;
+ try{
+  if(modalType==="user"){
+   const payload={nome:$("fNome").value.trim(),email:$("fEmail").value.trim(),senha:$("fSenha").value,perfil:$("fPerfil").value,ativo:$("fAtivo").checked};
+   if(editing)payload.id=editing.id;
+   await call("salvarUsuario",payload);toast("Usuário salvo com sucesso.");
+  }else if(modalType==="menu"){
+   const payload={nome:$("fMenuNome").value.trim(),icone:$("fMenuIcone").value.trim()||"▦",ordem:Number($("fMenuOrdem").value||0)};
+   if(editing)payload.id=editing.id;
+   await call("salvarMenu",payload);toast("Menu salvo com sucesso.");
+  }else if(modalType==="page"){
+   const payload={nome:$("fNome").value.trim(),arquivo:$("fArquivo").value.trim(),icone:$("fIcone").value.trim()||"📄",url:$("fUrl").value.trim(),ordem:Number($("fOrdem").value||0),menu:$("fMenu").value.trim()||"Menu principal",submenu:$("fSubmenu").value.trim(),descricao:$("fDescricao").value.trim(),ativo:$("fAtivo").checked};
+   if(editing)payload.id=editing.id;
+   await call("salvarPagina",payload);toast("Página salva com sucesso.");
+  }
+  closeModal();await loadUsers();await loadMenus();await loadPages();
+ }catch(err){toast(err.message,"error")}finally{btn.disabled=false}
+});
+
+async function deleteUser(id){
+ const user=users.find(u=>u.id===id);if(!user||!confirm("Excluir o usuário "+user.email+"? As permissões e sessões dele também serão removidas."))return;
+ try{await call("excluirUsuario",{id});toast("Usuário excluído.");await loadUsers()}catch(e){toast(e.message,"error")}
+}
+async function deleteMenu(id){
+ const menu=menus.find(m=>m.id===id);if(!menu||!confirm("Excluir o menu "+menu.nome+"?"))return;
+ try{await call("excluirMenu",{id});toast("Menu excluído.");await loadMenus()}catch(e){toast(e.message,"error")}
+}
+async function deletePage(id){
+ const page=pages.find(p=>p.id===id);if(!page||!confirm("Excluir a página "+page.nome+"? As permissões associadas também serão removidas."))return;
+ try{await call("excluirPagina",{id});toast("Página excluída.");await loadPages();if($("permissionUser").value)await loadPermissions()}catch(e){toast(e.message,"error")}
+}
+async function loadPermissions(){
+ const email=$("permissionUser").value;if(!email){toast("Selecione um usuário.","error");return}
+ try{
+  permissions=await call("listarPermissoes",{email});if(!Array.isArray(permissions))permissions=[];
+  const body=$("permissionsBody");body.replaceChildren();$("permissionsEmpty").hidden=permissions.length>0;
+  permissions.forEach(p=>{
+   const tr=document.createElement("tr");tr.dataset.pageId=p.paginaId;
+   tr.innerHTML=`<td>${esc(p.nome)}<div style="font-size:10px;color:#777;margin-top:4px">${esc(p.arquivo)}</div></td><td><span class="tag ${p.ativo?"active":"inactive"}">${p.ativo?"ATIVA":"INATIVA"}</span></td><td><input type="checkbox" class="canView" aria-label="Pode ver ${esc(p.nome)}" ${p.podeVer?"checked":""}></td><td><input type="checkbox" class="canEdit" aria-label="Pode editar ${esc(p.nome)}" ${p.podeEditar?"checked":""}></td>`;
+   const view=tr.querySelector(".canView"),edit=tr.querySelector(".canEdit");
+   view.addEventListener("change",()=>{if(!view.checked)edit.checked=false});
+   edit.addEventListener("change",()=>{if(edit.checked)view.checked=true});
+   body.append(tr);
+  });
+ }catch(e){toast(e.message,"error")}
+}
+$("loadPermissions").addEventListener("click",loadPermissions);$("permissionUser").addEventListener("change",loadPermissions);
+$("savePermissions").addEventListener("click",async()=>{
+ const email=$("permissionUser").value;if(!email){toast("Selecione um usuário.","error");return}
+ const rows=[...$("permissionsBody").querySelectorAll("tr")];if(!rows.length){toast("Não há permissões carregadas.","error");return}
+ const btn=$("savePermissions");btn.disabled=true;
+ try{
+  for(const row of rows){
+   const podeVer=row.querySelector(".canView").checked,podeEditar=row.querySelector(".canEdit").checked;
+   await call("salvarPermissao",{email,paginaId:row.dataset.pageId,podeVer,podeEditar});
+  }
+  toast("Permissões salvas com sucesso.");
+ }catch(e){toast("Falha ao salvar permissões: "+e.message,"error")}finally{btn.disabled=false}
+});
+
+function renderHomeBlocks(blocks) {
+ const list = $("homeBlocksList"); list.innerHTML = "";
+ if(!blocks) blocks = [];
+ blocks.forEach((b) => {
+   const div = document.createElement("div");
+   div.style = "display:flex;gap:8px;margin-bottom:8px;align-items:center;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee;";
+   div.innerHTML = `
+     <input type="text" value="${esc(b.icon||"📄")}" placeholder="Ícone" style="width:60px">
+     <input type="text" value="${esc(b.title||"")}" placeholder="Título" style="flex:1">
+     <input type="text" value="${esc(b.text||"")}" placeholder="Texto" style="flex:2">
+     <button type="button" class="danger" onclick="this.parentElement.remove()" style="padding:4px 8px">×</button>
+   `;
+   list.append(div);
+ });
+}
+
+$("addHomeBlock").addEventListener("click", () => {
+ const list = $("homeBlocksList");
+ const div = document.createElement("div");
+ div.style = "display:flex;gap:8px;margin-bottom:8px;align-items:center;background:#fff;padding:8px;border-radius:8px;border:1px solid #eee;";
+ div.innerHTML = `
+   <input type="text" value="📄" placeholder="Ícone" style="width:60px">
+   <input type="text" value="" placeholder="Título" style="flex:1">
+   <input type="text" value="" placeholder="Texto" style="flex:2">
+   <button type="button" class="danger" onclick="this.parentElement.remove()" style="padding:4px 8px">×</button>
+ `;
+ list.append(div);
+});
+
+async function loadHomeSettings(){
+ try{
+  const configs = await call("obterConfiguracoes");
+  if(configs.home) {
+   const home = JSON.parse(configs.home);
+   if(home.title) $("homeTitle").value = home.title;
+   if(home.intro) $("homeIntro").value = home.intro;
+   if(home.news) $("homeNews").value = home.news;
+   renderHomeBlocks(home.blocks || []);
+  } else {
+   renderHomeBlocks([]);
+  }
+ } catch(e) {
+  console.warn("Erro ao carregar configs:", e);
+  try{const v=JSON.parse(localStorage.getItem("portalHomeSettings")||"{}");if(v.title)$("homeTitle").value=v.title;if(v.intro)$("homeIntro").value=v.intro;if(v.news)$("homeNews").value=v.news;}catch(err){}
+  renderHomeBlocks([]);
+ }
+}
+
+$("saveHome").addEventListener("click", async () => {
+ const blocks = [];
+ $("homeBlocksList").querySelectorAll("div").forEach(row => {
+   const inputs = row.querySelectorAll("input");
+   if(inputs.length === 3) {
+      blocks.push({ icon: inputs[0].value.trim(), title: inputs[1].value.trim(), text: inputs[2].value.trim() });
+   }
+ });
+ const configs = {
+   home: JSON.stringify({
+     title: $("homeTitle").value.trim(),
+     intro: $("homeIntro").value.trim(),
+     news: $("homeNews").value.trim(),
+     blocks: blocks
+   })
+ };
+ try {
+   await call("salvarConfiguracoes", { configs });
+   toast("Página inicial salva com sucesso.");
+ } catch(e) { toast(e.message, "error"); }
+});
+
+/* ------------------ LOGICA DE E-MAIL MELHORADA ------------------ */
+function initEmailTab() {
+ if (!quill) {
+   quill = new Quill('#emailEditor', {
+     theme: 'snow',
+     placeholder: 'Escreva sua mensagem aqui...',
+     modules: {
+       toolbar: [
+         [{ 'header': [1, 2, false] }],
+         ['bold', 'italic', 'underline', 'strike'],
+         [{ 'color': [] }, { 'background': [] }],
+         [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+         ['link'],
+         ['clean']
+       ]
+     }
+   });
+ }
+ 
+ const list = $("emailUsersList"); list.innerHTML = "";
+ users.forEach(u => {
+   const lbl = document.createElement("label");
+   lbl.className = "email-card";
+   lbl.innerHTML = `
+     <input type="checkbox" class="email-check" value="${esc(u.email)}">
+     <div class="email-card-info">
+       <span class="email-card-name">${esc(u.nome)}</span>
+       <span class="email-card-email">${esc(u.email)}</span>
+     </div>
+   `;
+   
+   const chk = lbl.querySelector("input");
+   chk.addEventListener("change", () => {
+      lbl.classList.toggle("selected", chk.checked);
+   });
+   
+   list.append(lbl);
+ });
+ 
+ $("selectAllUsers").onchange = (e) => {
+   const checks = list.querySelectorAll(".email-check");
+   checks.forEach(c => {
+       c.checked = e.target.checked;
+       c.closest(".email-card").classList.toggle("selected", e.target.checked);
+   });
+ };
+}
+
+$("sendBulkEmail").addEventListener("click", async () => {
+ const emails = [...$("emailUsersList").querySelectorAll(".email-check:checked")].map(c => c.value);
+ const subject = $("emailSubject").value.trim();
+ const htmlBody = quill.root.innerHTML;
+ 
+ if(emails.length === 0) { toast("Selecione pelo menos um usuário.", "error"); return; }
+ if(!subject) { toast("Digite um assunto para o e-mail.", "error"); return; }
+ if(quill.getText().trim() === "") { toast("Digite a mensagem do e-mail.", "error"); return; }
+ 
+ const btn = $("sendBulkEmail"); btn.disabled = true; btn.textContent = "Enviando...";
+ try {
+   await call("enviarEmailMassa", { emails, subject, htmlBody });
+   toast("E-mails disparados com sucesso!", "success");
+   $("emailSubject").value = "";
+   quill.setContents([]);
+   $("selectAllUsers").checked = false;
+   $("emailUsersList").querySelectorAll(".email-check").forEach(c => {
+       c.checked = false;
+       c.closest(".email-card").classList.remove("selected");
+   });
+ } catch(e) {
+   toast(e.message, "error");
+ } finally {
+   btn.disabled = false; btn.textContent = "📤 Disparar E-mails";
+ }
+});
+
+$("clearCache").addEventListener("click", () => {
+  if(!confirm("Isso fará logout e limpará TODOS os dados locais e caches. Deseja continuar?")) return;
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+    if("caches" in window){
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+    }
+    location.replace("login.html");
+  } catch(e) {
+    toast("Erro ao limpar dados: " + e.message, "error");
+  }
+});
+
+async function init(){
+ if(!await guard())return;
+ try{await loadUsers();await loadMenus();await loadPages()}catch(e){toast(e.message,"error")}
+}
+init();
+</script>
+</body>
+</html>

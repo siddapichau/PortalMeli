@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestão de Equipamentos SSC1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f4f6f9; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  #loader-overlay { position: fixed; inset: 0; background: rgba(45,50,119,.85); z-index: 9999; display: none; align-items: center; justify-content: center; }
+  #loader-overlay.active { display: flex; }
+  .spinner { width: 60px; height: 60px; border: 6px solid rgba(255,215,0,.3); border-top-color: #FFD700; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  .card-btn { background:#fff; border-radius:16px; padding:20px; transition:all .2s; cursor:pointer; border:2px solid transparent; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .card-btn:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(45,50,119,.15); border-color:#FFD700; }
+  
+  .inv-card { background: linear-gradient(135deg, #1e224a, #2D3277); color: white; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 20px; cursor: pointer; transition: all .2s; box-shadow: 0 4px 15px rgba(45,50,119,0.3); border: 2px solid transparent; }
+  .inv-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(45,50,119,0.5); border-color: #FFD700; }
+  .inv-card.green { background: linear-gradient(135deg, #167442, #1e9b57); box-shadow: 0 4px 15px rgba(22,116,66,0.3); }
+  .inv-card.green:hover { box-shadow: 0 8px 25px rgba(22,116,66,0.5); }
+  .inv-img { width: 80px; height: 80px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); }
+  
+  .status-badge { padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; display:inline-block; white-space:nowrap; }
+  .st-em-chamado   { background:#FFF3CD; color:#856404; }
+  .st-enviado-ti   { background:#D1ECF1; color:#0C5460; }
+  .st-esperando    { background:#FFE5B4; color:#8B4513; }
+  .st-funcionando  { background:#D4EDDA; color:#155724; }
+  .st-fechado      { background:#F8D7DA; color:#721C24; }
+  .st-devolver     { background:#E9ECEF; color:#495057; }
+  
+  .tab-btn { padding:6px 14px; border-radius:999px; font-size:13px; font-weight:600; white-space:nowrap; background:#e5e7eb; color:#374151; cursor:pointer; transition:all .15s; display:flex; align-items:center; gap:6px; }
+  .tab-btn.active { background:#2D3277; color:#fff; }
+  .tab-badge { background:rgba(0,0,0,0.1); padding:2px 6px; border-radius:10px; font-size:10px; }
+  .tab-btn.active .tab-badge { background:rgba(255,255,255,0.2); }
+  
+  .table-compact th, .table-compact td { padding: 6px 8px; }
+  .exporting-mode .no-export { display:none !important; }
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader-overlay">
+  <div class="text-center">
+    <div class="spinner mx-auto"></div>
+    <p class="text-white mt-4 font-semibold">Processando...</p>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="bg-[#2D3277] text-white shadow-lg sticky top-0 z-50">
+  <div class="max-w-[1400px] mx-auto px-4 py-2 flex items-center justify-between flex-wrap gap-2">
+    <div class="flex items-center gap-3">
+      <i class="fa-solid fa-boxes-stacked text-xl text-[#FFD700]"></i>
+      <div>
+        <h1 class="text-base font-bold leading-tight">Gestão de Equipamentos SSC1</h1>
+        <p class="text-[10px] opacity-80 leading-tight">Lista de equipamentos cadastrados</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-2">
+      <div id="header-filters" class="hidden items-center gap-2 mr-2">
+        <div class="relative w-48">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2 text-gray-400 text-xs"></i>
+          <input type="text" id="filtro-busca" oninput="renderizarEquipamentos()" placeholder="Buscar ID..." class="w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-xs text-gray-800 outline-none">
+        </div>
+        <select id="filtro-situacao" onchange="renderizarEquipamentos()" class="border border-gray-300 rounded px-2 py-1 text-xs text-gray-800 outline-none">
+          <option value="">Todas as Situações</option>
+          <option value="Em chamado">Em chamado</option>
+          <option value="Enviado TI">Enviado TI</option>
+          <option value="Esperando Peça">Esperando Peça</option>
+          <option value="Funcionando">Funcionando</option>
+          <option value="Devolver">Devolver</option>
+          <option value="Fechado N/R">Fechado N/R</option>
+        </select>
+      </div>
+
+      <div id="user-greeting" class="hidden md:flex items-center text-xs text-white/90 bg-white/10 px-2 py-1 rounded mr-2">
+        <i class="fa-solid fa-user mr-1"></i><span id="user-name">...</span>
+      </div>
+      <input type="text" id="manual-user" placeholder="Seu nome..." class="hidden px-2 py-1 rounded text-xs text-gray-800 outline-none w-24 mr-2" onchange="salvarNomeManual()">
+
+      <div id="header-eq-actions" class="hidden items-center gap-2 mr-2">
+        <button onclick="copiarWhatsApp()" class="bg-green-500 text-white hover:bg-green-600 px-3 py-1.5 rounded text-xs font-semibold transition-colors">
+          <i class="fa-brands fa-whatsapp mr-1 text-sm"></i>Relatório
+        </button>
+        <button onclick="carregarEquipamentos(true)" class="bg-white/10 text-white hover:bg-white/20 px-3 py-1.5 rounded text-xs font-semibold transition-colors" title="Atualizar">
+          <i class="fa-solid fa-rotate-right"></i>
+        </button>
+        <button onclick="abrirModalEquipamento()" class="bg-[#FFD700] text-[#2D3277] hover:bg-yellow-400 px-3 py-1.5 rounded text-xs font-semibold transition-colors">
+          <i class="fa-solid fa-plus mr-1"></i>Novo
+        </button>
+      </div>
+      
+      <button onclick="confirmarLimparInventario()" class="bg-red-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-red-600 transition-colors mr-1" title="Limpar Inventário">
+        <i class="fa-solid fa-trash-can mr-1"></i>Limpar Inv.
+      </button>
+
+      <button onclick="abrirTela('screen-menu')" class="bg-[#FFD700] text-[#2D3277] px-3 py-1.5 rounded text-xs font-semibold hover:bg-yellow-400 transition-colors">
+        <i class="fa-solid fa-house mr-1"></i>Menu
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1400px] mx-auto px-4 py-4">
+
+  <!-- ============ MENU ============ -->
+  <div id="screen-menu" class="screen active">
+    <div class="mb-8">
+      <h2 class="text-lg font-bold text-[#2D3277] mb-3">Gestão de Inventário</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        <div class="inv-card" onclick="abrirInventario('')">
+          <svg class="inv-img" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="15" width="35" height="25" rx="3" fill="#FFD700"/><rect x="15" y="20" width="25" height="10" fill="#2D3277"/><rect x="15" y="35" width="25" height="2" fill="#2D3277"/>
+            <rect x="55" y="10" width="35" height="25" rx="2" fill="#E5E7EB"/><rect x="55" y="10" width="35" height="20" fill="#3B82F6"/><rect x="65" y="32" width="15" height="3" fill="#9CA3AF"/>
+            <rect x="40" y="45" width="20" height="35" rx="3" fill="#111827"/><rect x="43" y="50" width="14" height="20" fill="#10B981"/>
+            <path d="M10 75 L25 65 L40 75 L25 85 Z" fill="#6B7280"/><path d="M20 70 L25 65 L30 70 L25 75 Z" fill="#FFD700"/>
+            <rect x="70" y="60" width="25" height="15" rx="2" fill="#4B5563"/><rect x="75" y="63" width="15" height="9" fill="#1F2937"/>
+          </svg>
+          <div>
+            <h3 class="text-xl font-bold text-white">Dashboard Inventário</h3>
+            <p class="text-sm text-blue-100 mt-1">Visualizar estatísticas e totais</p>
+          </div>
+        </div>
+
+        <div class="inv-card green" onclick="fazerInventario()">
+          <svg class="inv-img" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="25" y="15" width="50" height="70" rx="5" fill="#F3F4F6"/><path d="M35 15 L65 15 L65 25 L35 25 Z" fill="#9CA3AF"/><rect x="35" y="20" width="30" height="3" fill="#4B5563"/>
+            <circle cx="38" cy="40" r="4" fill="#10B981"/><rect x="48" y="38" width="20" height="4" rx="2" fill="#D1D5DB"/>
+            <circle cx="38" cy="55" r="4" fill="#10B981"/><rect x="48" y="53" width="20" height="4" rx="2" fill="#D1D5DB"/>
+            <circle cx="38" cy="70" r="4" fill="#10B981"/><rect x="48" y="68" width="15" height="4" rx="2" fill="#D1D5DB"/>
+            <path d="M60 75 L70 65 L75 70 L60 85 L50 80 Z" fill="#FFD700"/>
+          </svg>
+          <div>
+            <h3 class="text-xl font-bold text-white">Fazer Inventário</h3>
+            <p class="text-sm text-green-100 mt-1">Abrir leitor para celular</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="text-lg font-bold text-[#2D3277] mb-3">Escolha o tipo de equipamento</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="grid-tipos"></div>
+  </div>
+
+  <!-- ============ TELA DE EQUIPAMENTOS ============ -->
+  <div id="screen-equipamentos" class="screen">
+    <div class="flex gap-2 mb-4 overflow-x-auto pb-2 no-scrollbar" id="tabs-tipos"></div>
+    <div class="bg-white rounded-xl shadow overflow-hidden">
+      <div class="overflow-y-auto" style="max-height: calc(100vh - 160px);">
+        <table class="w-full text-sm table-compact">
+          <thead class="sticky top-0 bg-[#2D3277] text-white z-10 shadow-md">
+            <tr>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">ID / Serial</th>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">Tipo</th>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">Descrição</th>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">IP</th>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">Chamado</th>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">Situação</th>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">Inventário</th>
+              <th class="text-left font-semibold text-xs uppercase tracking-wider">Alt. por</th>
+              <th class="text-center font-semibold text-xs uppercase tracking-wider">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-equipamentos" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+      <div id="empty-equip" class="hidden text-center py-10 text-gray-500">
+        <i class="fa-solid fa-inbox text-3xl mb-2 text-gray-300"></i>
+        <p class="text-sm">Nenhum equipamento encontrado.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TELA DO DASHBOARD INVENTÁRIO ============ -->
+  <div id="screen-inventario" class="screen">
+    
+    <div id="dashboard-container" class="bg-[#f4f6f9] p-8 md:p-12 rounded-xl">
+      
+      <div class="bg-white rounded-xl shadow-sm mb-6 border-t-[6px] border-[#FFD700] flex justify-center items-center py-4 px-2">
+        <h2 class="text-xl md:text-3xl font-black text-[#2D3277] uppercase tracking-wide m-0 text-center" id="inv-main-title">
+          INVENTÁRIO EQUIPAMENTOS — <span id="inv-date-span">...</span>
+        </h2>
+      </div>
+
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
+        <!-- Subtítulo que agora pode ser ocultado -->
+        <p class="text-sm font-semibold text-gray-500 hidden" id="inv-subtitle"></p>
+        
+        <div class="flex flex-wrap items-center gap-2 no-export ml-auto">
+          <select id="filtro-data-inv" onchange="abrirInventario(this.value)" class="border border-gray-300 p-2 rounded text-sm bg-white font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-[#2D3277] shadow-sm">
+             <option value="">Inventário Atual</option>
+          </select>
+          
+          <button onclick="abrirModalComparar()" class="bg-purple-600 text-white px-3 py-2 rounded text-sm font-bold hover:bg-purple-700 transition-colors shadow"><i class="fa-solid fa-code-compare mr-1"></i> Comparar</button>
+          
+          <button onclick="copiarWhatsAppInv()" class="bg-green-500 text-white px-3 py-2 rounded text-sm font-bold hover:bg-green-600 transition-colors shadow"><i class="fa-brands fa-whatsapp mr-1"></i> Copiar</button>
+          
+          <button onclick="exportarImagemInv()" class="bg-blue-600 text-white px-3 py-2 rounded text-sm font-bold hover:bg-blue-700 transition-colors shadow"><i class="fa-solid fa-camera mr-1"></i> Exportar</button>
+          
+          <button onclick="abrirTela('screen-menu')" class="text-gray-400 hover:text-red-500 ml-2"><i class="fa-solid fa-times text-2xl"></i></button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8" id="inv-kpis">
+        <!-- KPIs preenchidos via JS -->
+      </div>
+
+      <h3 class="text-xl font-bold text-[#2D3277] mb-4"><i class="fa-solid fa-list-check mr-2 text-blue-600"></i>Totais por Tipo de Equipamento</h3>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <table class="w-full text-base">
+          <thead class="bg-gray-100 text-gray-700 border-b border-gray-300">
+            <tr>
+              <th class="text-left py-3 px-4 font-bold">Tipo</th>
+              <th class="text-center py-3 px-4 font-bold">Total</th>
+              <th class="text-center py-3 px-4 font-bold text-green-600">Inventariado</th>
+              <th class="text-center py-3 px-4 font-bold text-red-500">Faltando</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-inv-tipos" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- MODAL COMPARAR INVENTÁRIOS -->
+<div id="modal-comparar" class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
+    <div class="bg-purple-700 text-white p-4 flex justify-between items-center rounded-t-xl">
+      <h3 class="text-lg font-bold"><i class="fa-solid fa-code-compare mr-2"></i>Comparar Inventários</h3>
+      <button onclick="fecharModalComparar()" class="text-white hover:text-gray-200 text-xl"><i class="fa-solid fa-times"></i></button>
+    </div>
+    
+    <div class="p-4 bg-gray-50 border-b flex flex-wrap gap-4 items-end">
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1 uppercase">Data 1 (Anterior)</label>
+        <select id="comp-data1" class="border p-2 rounded w-48 text-sm outline-none"></select>
+      </div>
+      <div class="pb-3 text-gray-400"><i class="fa-solid fa-arrow-right"></i></div>
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1 uppercase">Data 2 (Mais Recente)</label>
+        <select id="comp-data2" class="border p-2 rounded w-48 text-sm outline-none"></select>
+      </div>
+      <button onclick="executarComparacao()" class="bg-purple-600 text-white px-4 py-2 rounded font-bold hover:bg-purple-700 ml-auto mb-0.5"><i class="fa-solid fa-bolt mr-1"></i>Comparar</button>
+    </div>
+
+    <div class="p-4 overflow-y-auto flex-1" id="comp-resultado">
+      <p class="text-center text-gray-500 mt-10">Selecione as duas datas e clique em Comparar.</p>
+    </div>
+  </div>
+</div>
+
+<!-- MODAIS (Equipamento e Histórico) -->
+<div id="modal-equip" class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div class="bg-[#2D3277] text-white p-3 rounded-t-xl flex justify-between items-center">
+      <h3 class="text-base font-bold" id="modal-title">Editar Equipamento</h3>
+      <button onclick="fecharModalEquipamento()" class="text-white hover:text-[#FFD700] text-lg"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <input type="hidden" id="eq-rowIndex">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">ID / Serial *</label><input id="eq-id" type="text" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none"></div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Tipo *</label>
+          <select id="eq-tipo" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none">
+            <option value="Etiquetadora">Etiquetadora</option><option value="E Portátil">E Portátil</option><option value="Impressora Laser">Impressora Laser</option>
+            <option value="Handheld">Handheld</option><option value="Bipador 2D">Bipador 2D</option><option value="Notebook">Notebook</option>
+            <option value="Monitor">Monitor</option><option value="TV">TV</option>
+          </select>
+        </div>
+      </div>
+      <div><label class="block text-xs font-semibold text-gray-700 mb-1">Descrição</label><input id="eq-descricao" type="text" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none"></div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">IP</label><input id="eq-ip" type="text" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none"></div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Chamado</label><input id="eq-chamado" type="text" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none"></div>
+      </div>
+      <div><label class="block text-xs font-semibold text-gray-700 mb-1">Situação Atual</label>
+        <select id="eq-situacao" onchange="verificarSituacao()" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none">
+          <option value="">-- Selecione --</option><option value="Em chamado">Em chamado</option><option value="Enviado TI">Enviado TI</option>
+          <option value="Esperando Peça">Esperando Peça</option><option value="Funcionando">Funcionando</option>
+          <option value="Devolver">Devolver</option><option value="Fechado N/R">Fechado N/R</option>
+        </select>
+      </div>
+      <div><label class="block text-xs font-semibold text-gray-700 mb-1">Observação</label><textarea id="eq-observacao" rows="2" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none"></textarea></div>
+      <div class="flex gap-2 pt-2 border-t mt-4">
+        <button id="btn-excluir" onclick="excluirEquipamento()" class="bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded-md text-sm font-semibold hover:bg-red-100 hidden"><i class="fa-solid fa-trash"></i></button>
+        <button onclick="fecharModalEquipamento()" class="flex-1 bg-gray-100 text-gray-700 px-3 py-2 rounded-md text-sm font-semibold hover:bg-gray-200">Cancelar</button>
+        <button onclick="salvarEquipamento()" class="flex-1 bg-[#2D3277] text-white px-3 py-2 rounded-md text-sm font-semibold hover:bg-blue-900"><i class="fa-solid fa-save mr-1"></i>Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-historico" class="fixed inset-0 bg-black/60 z-[100] hidden items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div class="bg-[#2D3277] text-white p-3 rounded-t-xl flex justify-between items-center sticky top-0 z-10">
+      <h3 class="text-base font-bold" id="hist-title">Histórico</h3>
+      <button onclick="fecharHistorico()" class="text-white hover:text-[#FFD700] text-lg"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div class="p-3"><div id="hist-content" class="space-y-2"></div></div>
+  </div>
+</div>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbwBYVga-nnSAa48v7SnpHVVp_1hFWzzWDohf12__bV6P2NqxpFD_vA-1yNKZQ-gqz0QGA/exec';
+const BIPAR_URL = 'biparinventario.html';
+
+const TIPOS = [
+  { tipo: 'Etiquetadora', img: 'https://www.zebra.com/content/dam/support-dam/global/photography/web-production/0001/zt411-linerless-product-photography-left-media-with-shadow-300x300.png.imgo.png', sub: 'Térmicas' },
+  { tipo: 'E Portátil',   img: 'https://www.zebra.com/content/dam/zebra_dam/global/zcom-web-production/web-production-photography/web001/zq600-series-right-facing-zq630-3x2-3600.jpg', sub: 'Portáteis' },
+  { tipo: 'Impressora Laser', img: 'https://www.creativecopias.com.br/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/7/9/7970_ampliada.jpg', sub: 'Laser' },
+  { tipo: 'Handheld',     img: 'https://cdn11.bigcommerce.com/s-im2p1/images/stencil/1280x1280/products/4149/8338/TC211__84648.1676639415.png?c=2?imbypass=on', sub: 'Coletores' },
+  { tipo: 'Bipador 2D',   img: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQOO_wzBZSzxeZcZA9IgBh8yce0NERcAclwXct7DnwO-w&s=10', sub: 'Leitores' },
+  { tipo: 'Notebook',     img: 'https://i.dell.com/is/image/DellContent/content/dam/ss2/product-images/dell-client-products/notebooks/dell-pro/pv15250/pdp/laptop-dell-pro-essential-15-pv15250-built.psd?fmt=png-alpha&wid=3840&hei=2160', sub: 'Notebooks' },
+  { tipo: 'Monitor',      img: 'https://netcomputadores.com.br/dbimg/produtos/p2418ht_67339_g.jpg', sub: 'Monitores' },
+  { tipo: 'TV',           img: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS5tTRGkIoId4LBBavgA0z36h2Wj0LNqdj3JBcCnPIW41bHJHTbuSXf59rh&s=10', sub: 'Televisores' }
+];
+
+const STATUS_CLASSES = {
+  'Em chamado': 'st-em-chamado', 'Enviado TI': 'st-enviado-ti', 'Esperando Peça': 'st-esperando',
+  'Funcionando': 'st-funcionando', 'Devolver': 'st-devolver', 'Fechado N/R': 'st-fechado'
+};
+
+let tipoAtual = '';
+let cacheEquipamentos = null;
+let nomeUsuario = 'Desconhecido';
+let currentInvStats = null; 
+let cachedDatasInv = [];
+
+async function fetchUser() {
+  let nomePortal = localStorage.getItem("nome");
+  if (!nomePortal || nomePortal === "undefined") { try { if (window.parent && window.parent.localStorage) nomePortal = window.parent.localStorage.getItem("nome"); } catch (e) {} }
+  if (nomePortal && nomePortal !== "undefined" && nomePortal !== "null") return definirUsuario(nomePortal);
+  const urlUser = new URLSearchParams(window.location.search).get('usuario');
+  if (urlUser) return definirUsuario(urlUser);
+  try { const data = await callAPI('getUser', {}); if (data.ok && data.nome) return definirUsuario(data.nome); } catch(e) {}
+  const salvo = localStorage.getItem('ssc_user_manual');
+  if (salvo) definirUsuario(salvo);
+  else { document.getElementById('user-greeting').classList.add('hidden'); document.getElementById('manual-user').classList.remove('hidden'); }
+}
+
+function definirUsuario(nome) {
+  nomeUsuario = nome;
+  document.getElementById('user-name').textContent = nome;
+  document.getElementById('user-greeting').classList.remove('hidden');
+  document.getElementById('user-greeting').classList.add('flex');
+  document.getElementById('manual-user').classList.add('hidden');
+}
+
+function salvarNomeManual() {
+  const val = document.getElementById('manual-user').value.trim();
+  if (val) { localStorage.setItem('ssc_user_manual', val); definirUsuario(val); }
+}
+
+function abrirTela(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const isEq = id === 'screen-equipamentos';
+  document.getElementById('header-eq-actions').classList.toggle('hidden', !isEq);
+  document.getElementById('header-eq-actions').classList.toggle('flex', isEq);
+  document.getElementById('header-filters').classList.toggle('hidden', !isEq);
+  document.getElementById('header-filters').classList.toggle('flex', isEq);
+}
+
+function mostrarLoader() { document.getElementById('loader-overlay').classList.add('active'); }
+function esconderLoader() { document.getElementById('loader-overlay').classList.remove('active'); }
+
+async function callAPI(action, payload = {}) {
+  mostrarLoader();
+  try {
+    const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }) });
+    const data = await resp.json(); if (data.erro) throw new Error(data.erro); return data;
+  } catch (err) { Swal.fire({ icon: 'error', title: 'Erro', text: err.message }); throw err; } 
+  finally { esconderLoader(); }
+}
+
+function renderizarCards() {
+  document.getElementById('grid-tipos').innerHTML = TIPOS.map(t => `
+    <div class="card-btn" onclick="abrirTipo('${t.tipo}')">
+      <div class="h-20 flex items-center justify-center mb-2"><img src="${t.img}" class="max-h-20 object-contain"></div>
+      <h3 class="text-sm font-bold text-[#2D3277] mt-2">${t.tipo}</h3><p class="text-[11px] text-gray-500">${t.sub}</p>
+    </div>`).join('');
+}
+
+function renderizarTabs() {
+  const el = document.getElementById('tabs-tipos');
+  const todas = [{t: 'Todos', q: ''}, ...TIPOS.map(x => ({t: x.tipo, q: x.tipo}))];
+  el.innerHTML = todas.map(obj => {
+    const count = obj.q ? (cacheEquipamentos||[]).filter(it => it.tipo === obj.q).length : (cacheEquipamentos||[]).length;
+    const ativo = obj.q === tipoAtual ? 'active' : '';
+    return `<button class="tab-btn ${ativo}" onclick="abrirTipo('${obj.q}')">${obj.t} <span class="tab-badge">${count}</span></button>`;
+  }).join('');
+}
+
+function abrirTipo(tipo) {
+  tipoAtual = tipo;
+  abrirTela('screen-equipamentos');
+  renderizarTabs();
+  if (!cacheEquipamentos) carregarEquipamentos();
+  else renderizarEquipamentos();
+}
+
+async function carregarEquipamentos(forcar = false) {
+  if (cacheEquipamentos && !forcar) { renderizarEquipamentos(); return; }
+  try { const data = await callAPI('listar', {}); cacheEquipamentos = data.items || []; renderizarTabs(); renderizarEquipamentos(); } catch(e) {}
+}
+
+function formatarChamado(chamado) {
+  if (!chamado) return '-';
+  if (chamado.includes('jira') || chamado.includes('/browse/')) {
+    const match = chamado.match(/(IS-\d+)/i);
+    if (match) return `<a href="${chamado}" target="_blank" class="text-blue-600 hover:underline font-semibold">${match[1].toUpperCase()}</a>`;
+    return `<a href="${chamado}" target="_blank" class="text-blue-600 hover:underline font-semibold">Abrir Link</a>`;
+  }
+  if (/^IS-\d+/i.test(chamado)) return `<a href="https://jira.mercadolivre.com/browse/${chamado.toUpperCase()}" target="_blank" class="text-blue-600 hover:underline font-semibold">${chamado.toUpperCase()}</a>`;
+  return `<span class="font-mono text-xs font-semibold text-gray-700">${chamado}</span>`;
+}
+
+function renderizarEquipamentos() {
+  const tbody = document.getElementById('tbody-equipamentos');
+  const empty = document.getElementById('empty-equip');
+  const busca = document.getElementById('filtro-busca').value.toLowerCase().trim();
+  const sit = document.getElementById('filtro-situacao').value;
+
+  let filtrados = cacheEquipamentos || [];
+  if (tipoAtual) filtrados = filtrados.filter(it => it.tipo === tipoAtual);
+  if (sit) filtrados = filtrados.filter(it => it.situacao === sit);
+  if (busca) filtrados = filtrados.filter(it => (it.id && it.id.toLowerCase().includes(busca)) || (it.descricao && it.descricao.toLowerCase().includes(busca)));
+
+  if (filtrados.length === 0) { tbody.innerHTML = ''; empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  
+  tbody.innerHTML = filtrados.map(it => {
+    const stClass = STATUS_CLASSES[it.situacao] || 'bg-gray-100 text-gray-600';
+    const invBadge = it.inventariado === 'SIM' ? '<span class="text-green-600 font-bold"><i class="fa-solid fa-check-circle"></i> SIM</span>' : '<span class="text-gray-400">Não</span>';
+    return `
+      <tr class="hover:bg-gray-50 transition-colors">
+        <td class="font-mono text-xs font-semibold text-gray-800">${it.id}</td>
+        <td class="text-xs text-gray-600">${it.tipo}</td>
+        <td class="text-xs text-gray-800 font-medium">${it.descricao || '-'}</td>
+        <td class="font-mono text-xs text-gray-600">${it.ip || '-'}</td>
+        <td class="text-xs">${formatarChamado(it.chamado)}</td>
+        <td><span class="status-badge ${stClass}">${it.situacao || 'Sem status'}</span></td>
+        <td class="text-xs">${invBadge}</td>
+        <td class="text-xs text-gray-500">${it.alteradoPor || '-'}</td>
+        <td class="text-center">
+          <button onclick='editarEquipamento(${it.rowIndex})' class="text-[#2D3277] hover:text-blue-900 mr-2"><i class="fa-solid fa-pen"></i></button>
+          <button onclick='verHistorico("${it.id}")' class="text-gray-400 hover:text-gray-700"><i class="fa-solid fa-clock-rotate-left"></i></button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function copiarWhatsApp() {
+  let filtrados = cacheEquipamentos || [];
+  if (tipoAtual) filtrados = filtrados.filter(it => it.tipo === tipoAtual);
+  const counts = {}; filtrados.forEach(it => counts[it.situacao] = (counts[it.situacao] || 0) + 1);
+  const date = new Date(); const dia = String(date.getDate()).padStart(2, '0'); const mes = String(date.getMonth() + 1).padStart(2, '0');
+  const label = tipoAtual ? tipoAtual.toLowerCase() : 'equipamentos';
+
+  let msg = `Reporte ${label} ${dia}/${mes}  🗓️\n\n🖨️ Total: ${filtrados.length}\n`;
+  if (counts['Funcionando']) msg += `✅ Funcionando: ${counts['Funcionando']}\n`;
+  if (counts['Em chamado']) msg += `🚨 Em Chamado: ${counts['Em chamado']}\n`;
+  if (counts['Devolver']) msg += `↩️ Devolução: ${counts['Devolver']}\n`;
+  if (tipoAtual === 'Etiquetadora' || tipoAtual === 'E Portátil') {
+    if (counts['Funcionando']) { msg += `\nFuncionando:\n`; filtrados.filter(i => i.situacao === 'Funcionando').forEach(i => msg += `✅${i.descricao}-${i.id}\n`); }
+    if (counts['Em chamado']) { msg += `\nCom chamado aberto:\n`; filtrados.filter(i => i.situacao === 'Em chamado').forEach((i, idx) => msg += `${idx+1}.${i.descricao}-${i.id}\n`); }
+  }
+  navigator.clipboard.writeText(msg.trim()).then(() => Swal.fire({ icon: 'success', title: 'Copiado!', toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 }));
+}
+
+function abrirModalEquipamento(item) {
+  document.getElementById('modal-title').textContent = item ? 'Editar Equipamento' : 'Novo Equipamento';
+  document.getElementById('eq-rowIndex').value = item ? item.rowIndex : '';
+  document.getElementById('eq-id').value = item ? item.id : '';
+  document.getElementById('eq-tipo').value = item ? item.tipo : (tipoAtual || 'Etiquetadora');
+  document.getElementById('eq-descricao').value = item ? item.descricao : '';
+  document.getElementById('eq-ip').value = item ? item.ip : '';
+  document.getElementById('eq-chamado').value = item ? item.chamado : '';
+  document.getElementById('eq-situacao').value = item ? item.situacao : '';
+  document.getElementById('eq-observacao').value = item ? item.observacao : '';
+  document.getElementById('btn-excluir').classList.toggle('hidden', !item);
+  document.getElementById('modal-equip').classList.replace('hidden', 'flex');
+}
+function fecharModalEquipamento() { document.getElementById('modal-equip').classList.replace('flex', 'hidden'); }
+function editarEquipamento(idx) { const item = cacheEquipamentos.find(x => x.rowIndex === idx); if(item) abrirModalEquipamento(item); }
+function verificarSituacao() { if (document.getElementById('eq-situacao').value === 'Funcionando') { document.getElementById('eq-chamado').value = ''; document.getElementById('eq-observacao').value = ''; } }
+
+async function salvarEquipamento() {
+  const payload = {
+    rowIndex: document.getElementById('eq-rowIndex').value ? parseInt(document.getElementById('eq-rowIndex').value) : null,
+    id: document.getElementById('eq-id').value.trim(), tipo: document.getElementById('eq-tipo').value,
+    descricao: document.getElementById('eq-descricao').value.trim(), ip: document.getElementById('eq-ip').value.trim(),
+    chamado: document.getElementById('eq-chamado').value.trim(), situacao: document.getElementById('eq-situacao').value,
+    observacao: document.getElementById('eq-observacao').value.trim(), usuario: nomeUsuario
+  };
+  if (!payload.id) return Swal.fire('Atenção', 'ID é obrigatório.', 'warning');
+  try { await callAPI('salvar', payload); fecharModalEquipamento(); Swal.fire({icon:'success',title:'Salvo',timer:1000,showConfirmButton:false}); cacheEquipamentos = null; carregarEquipamentos(true); } catch(e) {}
+}
+
+async function excluirEquipamento() {
+  const rowIndex = document.getElementById('eq-rowIndex').value;
+  if (!rowIndex) return;
+  const conf = await Swal.fire({icon:'warning',title:'Excluir?',text:'Isso será registrado.',showCancelButton:true,confirmButtonColor:'#E74C3C'});
+  if (!conf.isConfirmed) return;
+  try { await callAPI('excluir', { rowIndex: parseInt(rowIndex), usuario: nomeUsuario }); fecharModalEquipamento(); cacheEquipamentos = null; carregarEquipamentos(true); } catch(e) {}
+}
+
+async function verHistorico(id) {
+  try {
+    const data = await callAPI('historico', { id });
+    document.getElementById('hist-title').textContent = id ? ('Histórico — ' + id) : 'Histórico Geral';
+    const content = document.getElementById('hist-content');
+    content.innerHTML = (data.items||[]).length ? data.items.map(h => `
+        <div class="border-l-4 border-[#2D3277] bg-gray-50 p-2.5 rounded text-sm mb-2">
+          <div class="flex justify-between items-center mb-1"><span class="font-bold text-[#2D3277] text-xs">${h.acao} — ${h.id}</span><span class="text-[10px] text-gray-500">${h.dataHora}</span></div>
+          <div class="grid grid-cols-2 gap-1 text-xs"><p><strong>Tipo:</strong> ${h.tipo||'-'}</p><p><strong>Situação:</strong> ${h.situacao||'-'}</p>
+          <p class="col-span-2"><strong>Obs:</strong> ${h.observacao||'-'}</p><p class="col-span-2 text-[10px] text-gray-500 mt-1"><i class="fa-solid fa-user"></i> Por: ${h.alteradoPor||'Sistema'}</p></div>
+        </div>`).join('') : '<p class="text-gray-500 text-center text-sm">Nenhum registro.</p>';
+    document.getElementById('modal-historico').classList.replace('hidden', 'flex');
+  } catch(e) {}
+}
+function fecharHistorico() { document.getElementById('modal-historico').classList.replace('flex', 'hidden'); }
+
+// ================= INVENTÁRIO =================
+async function abrirInventario(dataFiltro = '') {
+  abrirTela('screen-inventario');
+  
+  if (!dataFiltro) {
+    try {
+      const rDatas = await callAPI('listarDatasInv', {});
+      cachedDatasInv = rDatas.datas || [];
+      const sel = document.getElementById('filtro-data-inv');
+      sel.innerHTML = '<option value="">Inventário Atual</option>' + cachedDatasInv.map(d => `<option value="${d}">${d}</option>`).join('');
+    } catch(e) {}
+  }
+
+  try {
+    const res = await callAPI('estatisticasInv', { dataFiltro });
+    const s = res.stats;
+    currentInvStats = s;
+    
+    // ATUALIZA A DATA NO TÍTULO PADRÃO
+    const hojeStr = new Date().toLocaleDateString('pt-BR');
+    let dataExibicao = dataFiltro ? dataFiltro.split(' ')[0] : hojeStr;
+    document.getElementById('inv-date-span').textContent = dataExibicao;
+
+    // Lógica para exibir ou ocultar o subtítulo
+    const invSub = document.getElementById('inv-subtitle');
+    if (dataFiltro) {
+      invSub.textContent = `Histórico: ${dataFiltro}`;
+      invSub.classList.remove('hidden');
+    } else if (s.maxDate) {
+      invSub.textContent = `Último equipamento inventariado: ${s.maxDate}`;
+      invSub.classList.remove('hidden');
+    } else {
+      invSub.classList.add('hidden'); // Esconde se não tiver data
+    }
+    
+    document.getElementById('inv-kpis').innerHTML = `
+      <div class="bg-white p-4 rounded-xl shadow border-l-4 border-blue-500"><p class="text-xs text-gray-500 font-semibold uppercase">Total Geral</p><h3 class="text-3xl font-bold text-gray-800">${s.total}</h3></div>
+      <div class="bg-white p-4 rounded-xl shadow border-l-4 border-green-500"><p class="text-xs text-gray-500 font-semibold uppercase">Inventariado</p><h3 class="text-3xl font-bold text-green-600">${s.inventariado}</h3></div>
+      <div class="bg-white p-4 rounded-xl shadow border-l-4 border-red-500"><p class="text-xs text-gray-500 font-semibold uppercase">Faltando</p><h3 class="text-3xl font-bold text-red-600">${s.nao_inventariado}</h3></div>
+      <div class="bg-white p-4 rounded-xl shadow border-l-4 border-yellow-500"><p class="text-xs text-gray-500 font-semibold uppercase">Em Chamado</p><h3 class="text-3xl font-bold text-yellow-600">${s.em_chamado}</h3></div>
+      <div class="bg-white p-4 rounded-xl shadow border-l-4 border-teal-500"><p class="text-xs text-gray-500 font-semibold uppercase">Funcionando</p><h3 class="text-3xl font-bold text-teal-600">${s.funcionando}</h3></div>
+    `;
+    
+    let tbody = '';
+    const sortedTipos = Object.entries(s.por_tipo).sort((a,b) => b[1].total - a[1].total);
+    for (const [tipo, d] of sortedTipos) {
+      const faltando = d.total - d.inv;
+      tbody += `<tr>
+        <td class="py-2 px-4 font-semibold text-gray-700">${tipo}</td>
+        <td class="py-2 px-4 text-center font-bold">${d.total}</td>
+        <td class="py-2 px-4 text-center text-green-600 font-bold">${d.inv}</td>
+        <td class="py-2 px-4 text-center text-red-500 font-bold">${faltando}</td>
+      </tr>`;
+    }
+    document.getElementById('tbody-inv-tipos').innerHTML = tbody;
+  } catch (e) { Swal.fire('Erro', 'Não foi possível carregar estatísticas.', 'error'); }
+}
+
+function fazerInventario() {
+  window.open(BIPAR_URL, '_blank');
+}
+
+// ================= COMPARAR INVENTÁRIOS =================
+function abrirModalComparar() {
+  const sel1 = document.getElementById('comp-data1');
+  const sel2 = document.getElementById('comp-data2');
+  
+  if (cachedDatasInv.length < 2) {
+    return Swal.fire('Aviso', 'É necessário ter pelo menos 2 inventários salvos no histórico para comparar.', 'info');
+  }
+  
+  let options = cachedDatasInv.map(d => `<option value="${d}">${d}</option>`).join('');
+  sel1.innerHTML = options;
+  sel2.innerHTML = options;
+  
+  sel2.selectedIndex = 0;
+  sel1.selectedIndex = 1;
+
+  document.getElementById('comp-resultado').innerHTML = '<p class="text-center text-gray-500 mt-10">Selecione as duas datas e clique em Comparar.</p>';
+  document.getElementById('modal-comparar').classList.replace('hidden', 'flex');
+}
+
+function fecharModalComparar() {
+  document.getElementById('modal-comparar').classList.replace('flex', 'hidden');
+}
+
+async function executarComparacao() {
+  const data1 = document.getElementById('comp-data1').value;
+  const data2 = document.getElementById('comp-data2').value;
+  const resDiv = document.getElementById('comp-resultado');
+  
+  if (!data1 || !data2) return Swal.fire('Aviso', 'Selecione as duas datas.', 'warning');
+  if (data1 === data2) return Swal.fire('Aviso', 'Selecione datas diferentes.', 'warning');
+
+  resDiv.innerHTML = '<div class="text-center mt-10"><div class="spinner mx-auto border-gray-300 border-t-purple-600"></div><p class="mt-2 text-purple-700 font-bold">Comparando...</p></div>';
+  
+  try {
+    const res = await callAPI('compararInv', { data1, data2 });
+    const r = res.result;
+    
+    let html = `
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="bg-gray-100 p-4 rounded-xl text-center border-t-4 border-gray-400">
+          <p class="text-xs text-gray-500 font-bold uppercase">Data 1: ${data1}</p>
+          <p class="text-3xl font-bold text-gray-800 mt-1">${r.total1}</p>
+          <p class="text-sm font-semibold text-green-600 mt-1">${r.inventariado1} Inventariados</p>
+        </div>
+        <div class="bg-purple-50 p-4 rounded-xl text-center border-t-4 border-purple-600">
+          <p class="text-xs text-purple-600 font-bold uppercase">Data 2: ${data2}</p>
+          <p class="text-3xl font-bold text-purple-800 mt-1">${r.total2}</p>
+          <p class="text-sm font-semibold text-green-600 mt-1">${r.inventariado2} Inventariados</p>
+        </div>
+      </div>
+    `;
+    
+    if (r.statusAlterado.length > 0) {
+      html += `<h4 class="font-bold text-gray-700 mb-2 border-b pb-1">Status Alterados (${r.statusAlterado.length})</h4>`;
+      html += `<div class="overflow-x-auto mb-6"><table class="w-full text-sm text-left">
+        <thead class="bg-gray-100 text-gray-600"><tr><th class="p-2">ID / Descrição</th><th class="p-2">De (Data 1)</th><th class="p-2">Para (Data 2)</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">`;
+      r.statusAlterado.forEach(item => {
+        html += `<tr><td class="p-2 font-mono text-xs">${item.id} - ${item.descricao}</td><td class="p-2 text-gray-500">${item.de}</td><td class="p-2 font-bold text-[#2D3277]">${item.para}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+    } else {
+      html += `<p class="text-sm text-gray-500 mb-6">Nenhuma mudança de status registrada entre essas datas.</p>`;
+    }
+
+    if (r.novos.length > 0) {
+      html += `<h4 class="font-bold text-green-600 mb-2 border-b pb-1">Novos Equipamentos (${r.novos.length})</h4>`;
+      html += `<ul class="text-sm list-disc pl-5 text-gray-700 mb-6">`;
+      r.novos.forEach(item => html += `<li>${item.id} - ${item.descricao} (${item.tipo})</li>`);
+      html += `</ul>`;
+    }
+
+    if (r.removidos.length > 0) {
+      html += `<h4 class="font-bold text-red-500 mb-2 border-b pb-1">Removidos (${r.removidos.length})</h4>`;
+      html += `<ul class="text-sm list-disc pl-5 text-gray-700 mb-6">`;
+      r.removidos.forEach(item => html += `<li>${item.id} - ${item.descricao} (${item.tipo})</li>`);
+      html += `</ul>`;
+    }
+    
+    resDiv.innerHTML = html;
+  } catch (e) {
+    resDiv.innerHTML = `<p class="text-center text-red-500 font-bold">Erro ao comparar: ${e.message}</p>`;
+  }
+}
+
+// ================= EXPORTAR E COPIAR DASHBOARD =================
+function copiarWhatsAppInv() {
+  if (!currentInvStats) return;
+  const s = currentInvStats;
+  
+  let msg = `📦 Inventário Equipamentos 🗓️\n\n`;
+  msg += `Total Geral: ${s.total}\n`;
+  msg += `✅ Inventariado: ${s.inventariado}\n`;
+  msg += `❌ Faltando: ${s.nao_inventariado}\n`;
+  msg += `🚨 Em Chamado: ${s.em_chamado}\n`;
+  msg += `🟢 Funcionando: ${s.funcionando}\n\n`;
+  msg += `Por Tipo:\n`;
+  
+  const sortedTipos = Object.entries(s.por_tipo).sort((a,b) => b[1].total - a[1].total);
+  for(const [tipo, d] of sortedTipos) {
+     msg += `- ${tipo}: ${d.inv}/${d.total}\n`;
+  }
+  
+  navigator.clipboard.writeText(msg.trim()).then(() => {
+    Swal.fire({ icon: 'success', title: 'Relatório Copiado!', text: 'Cole no WhatsApp.', confirmButtonColor: '#2D3277' });
+  });
+}
+
+function exportarImagemInv() {
+  const target = document.getElementById('dashboard-container');
+  document.body.classList.add('exporting-mode');
+  
+  html2canvas(target, { scale: 2, backgroundColor: '#f4f6f9' }).then(canvas => {
+    document.body.classList.remove('exporting-mode');
+    const link = document.createElement('a');
+    link.download = `Inventario_${new Date().getTime()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }).catch(err => {
+    document.body.classList.remove('exporting-mode');
+    Swal.fire('Erro', 'Não foi possível gerar a imagem.', 'error');
+  });
+}
+
+// ================= LIMPAR INVENTÁRIO =================
+async function confirmarLimparInventario() {
+  const conf = await Swal.fire({
+    icon: 'warning',
+    title: '<span style="font-size: 2rem; font-weight: 900; color: #E74C3C; text-transform: uppercase;">ATENÇÃO!</span>',
+    html: '<p style="font-size: 1.5rem; font-weight: bold; color: #333; margin-bottom: 10px; line-height: 1.3;">Você está prestes a limpar o inventário!</p><p style="font-size: 1.2rem; color: #666;">Tem certeza absoluta? Essa ação salvará um snapshot no histórico e apagará a data e quem inventariou de TODOS os equipamentos atuais.</p>',
+    showCancelButton: true,
+    confirmButtonText: 'SIM, LIMPAR',
+    cancelButtonText: 'CANCELAR',
+    confirmButtonColor: '#E74C3C',
+    cancelButtonColor: '#6B7280',
+    customClass: { confirmButton: 'text-lg font-bold px-6 py-3', cancelButton: 'text-lg font-bold px-6 py-3' }
+  });
+  
+  if (conf.isConfirmed) {
+    try {
+      await callAPI('limparInventario', { usuario: nomeUsuario });
+      Swal.fire({ icon: 'success', title: 'LIMPO!', text: 'O inventário foi arquivado no histórico e resetado com sucesso.', confirmButtonColor: '#2D3277', customClass: { title: 'text-3xl font-bold' } });
+    } catch(e) {}
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderizarCards();
+  fetchUser();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Controle — Analise Deslocados</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <style>
+    :root { --azul: #2D3277; --amarelo: #FFD700; --fundo: #f4f6f9; }
+    body { background-color: var(--fundo); font-family: system-ui, -apple-system, sans-serif; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    
+    #loader-overlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,0.9);
+      display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;
+    }
+    #loader-overlay.show { display: flex; }
+    .spinner { width: 48px; height: 48px; border: 5px solid #e5e7eb; border-top-color: var(--azul); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .card-menu { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; transition: transform .2s; border: 1px solid #e5e7eb; display: flex; flex-direction: column; justify-content: center; }
+    .card-menu:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); border-color: #2D3277; }
+
+    .tabela-aderencia { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tabela-aderencia th, .tabela-aderencia td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee; }
+    .tabela-aderencia th { background: #f8f9fa; position: sticky; top: 0; color: #555; z-index: 10; }
+    .tabela-aderencia tr { cursor: pointer; }
+    .tabela-aderencia tr:hover { background-color: #f1f5f9; }
+    .tabela-aderencia tr.selected { background-color: #e0e7ff; font-weight: bold; border-left: 4px solid var(--azul); }
+
+    .status-verificados { background-color: #b6d7a8; color: #14532d; font-weight: bold; padding: 2px 6px; border-radius: 4px; display: inline-block; }
+    .status-pendente { background-color: #ffe599; color: #713f12; font-weight: bold; padding: 2px 6px; border-radius: 4px; display: inline-block; }
+    .status-deslocado { background-color: #ea9999; color: #7f1d1d; font-weight: bold; padding: 2px 6px; border-radius: 4px; display: inline-block; }
+    
+    .leitor-panel { position: sticky; top: 1rem; height: fit-content; background: #fff; border: 2px dashed #2D3277; }
+  </style>
+</head>
+<body class="p-4">
+
+  <div id="loader-overlay">
+    <div class="spinner"></div>
+    <p class="mt-4 font-bold text-[#2D3277]">Processando...</p>
+  </div>
+
+  <header class="bg-white rounded-lg shadow p-3 flex justify-between items-center mb-6 border-t-4 border-[#FFD700]">
+    <div class="flex items-center gap-3">
+      <button onclick="abrirTela('screen-menu')" class="text-[#2D3277] font-bold text-lg hover:opacity-80">
+        <i class="fa-solid fa-house mr-1"></i> Início
+      </button>
+      <span class="text-gray-300">|</span>
+      <a href="https://docs.google.com/spreadsheets/d/18Rg_tCQZ-JDiCb_Y0JzCHjw4UVAOZgIwQr12EOtueEI/edit" target="_blank" class="text-sm text-blue-700 hover:underline">
+        <i class="fa-solid fa-table"></i> Planilha
+      </a>
+      <button onclick="location.reload()" class="text-sm text-blue-700 hover:underline">
+        <i class="fa-solid fa-rotate-right"></i> Atualizar
+      </button>
+    </div>
+  </header>
+
+  <!-- MENU PRINCIPAL -->
+  <div id="screen-menu" class="screen active">
+    <h2 class="text-2xl font-bold text-[#2D3277] mb-6">Painel de Controle</h2>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 max-w-full">
+      
+      <div class="card-menu text-center" onclick="abrirTela('screen-upload')">
+        <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-file-import"></i></div>
+        <h3 class="text-lg font-bold text-[#2D3277]">1° Trazer e Verificar</h3>
+        <p class="text-sm text-gray-500 mt-2">Carregar CSV e processar.</p>
+      </div>
+
+      <div class="card-menu text-center border-2 border-[#FFD700]" onclick="executarImportarAreas()">
+        <div class="text-4xl text-[#FFD700] mb-3"><i class="fa-solid fa-boxes-stacked"></i></div>
+        <h3 class="text-lg font-bold text-[#2D3277]">2° Importar Áreas</h3>
+        <p class="text-sm text-gray-500 mt-2">Distribuir deslocados.</p>
+      </div>
+
+      <div class="card-menu text-center" onclick="abrirTela('screen-analisar'); carregarAderencia()">
+        <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-magnifying-glass-chart"></i></div>
+        <h3 class="text-lg font-bold text-[#2D3277]">3° Analisar</h3>
+        <p class="text-sm text-gray-500 mt-2">Filtre e gere o código de barras.</p>
+      </div>
+
+      <div class="card-menu text-center border-2 border-gray-300" onclick="abrirTela('screen-custom')">
+        <div class="text-4xl text-gray-700 mb-3"><i class="fa-solid fa-list-ul"></i></div>
+        <h3 class="text-lg font-bold text-[#2D3277]">4° Custom</h3>
+        <p class="text-sm text-gray-500 mt-2">Cole IDs ou envie CSV.</p>
+      </div>
+
+      <div class="card-menu text-center border-2 border-purple-300" onclick="abrirTela('screen-auditoria'); carregarAuditoria()">
+        <div class="text-4xl text-purple-600 mb-3"><i class="fa-solid fa-clipboard-check"></i></div>
+        <h3 class="text-lg font-bold text-purple-800">5° Auditoria</h3>
+        <p class="text-sm text-gray-500 mt-2">Cruzar IDs de ontem com pendentes de hoje.</p>
+      </div>
+
+      <div class="card-menu text-center" onclick="executarRodarQuery()">
+        <div class="text-4xl text-green-600 mb-3"><i class="fa-solid fa-rotate"></i></div>
+        <h3 class="text-lg font-bold text-green-700">Atualizar Query</h3>
+        <p class="text-sm text-gray-500 mt-2">Conectar ao BigQuery.</p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TELA: UPLOAD (1° Trazer e Verificar) -->
+  <div id="screen-upload" class="screen">
+    <h2 class="text-xl font-bold text-[#2D3277] mb-4">1° Trazer e Verificar</h2>
+    
+    <div class="bg-white rounded-lg shadow p-6 max-w-3xl">
+      <div class="mb-4">
+        <label class="block text-sm font-bold text-gray-700 mb-2">Upload de Arquivo(s) CSV</label>
+        <input type="file" id="file-input" accept=".csv" multiple class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+        <p class="text-xs text-blue-600 mt-1"><i class="fa-solid fa-circle-info"></i> Você pode selecionar vários arquivos de uma vez (Ctrl+Clique) para juntá-los.</p>
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-bold text-gray-700 mb-2">Ou cole os dados (Copiados do Excel):</label>
+        <textarea id="csv-textarea" class="w-full h-40 border rounded p-3 text-sm font-mono focus:outline-none focus:border-blue-500" placeholder="Pacote&#9;Data&#9;Situação&#9;Área&#9;Operador..."></textarea>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-4">
+        <button onclick="abrirTela('screen-menu')" class="bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm hover:opacity-80">Cancelar</button>
+        <button onclick="executarTrazerEVerificar()" class="bg-[#2D3277] text-white px-4 py-2 rounded text-sm hover:opacity-80"><i class="fa-solid fa-play mr-2"></i>Executar e Analisar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELA: ANALISAR (3° Analisar) -->
+  <div id="screen-analisar" class="screen">
+    
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <div class="flex flex-wrap gap-4 items-center mb-3 border-b pb-3">
+        <h2 class="text-xl font-bold text-[#2D3277] mr-auto">3° Analisar</h2>
+        
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-bold text-gray-600">Área:</label>
+          <select id="filtro-area" onchange="aplicarFiltros()" class="border rounded px-2 py-1 text-sm outline-none">
+            <option value="TODAS">Todas as Áreas</option>
+            <option value="Sorting">Sorting</option>
+            <option value="Problem Solving">Problem Solving</option>
+            <option value="Returns">Returns</option>
+            <option value="Buffered">Buffered</option>
+            <option value="Missort">Missort</option>
+            <option value="VAZIA">(Vazia)</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-bold text-gray-600">Operador:</label>
+          <select id="filtro-operador" onchange="aplicarFiltros()" class="border rounded px-2 py-1 text-sm outline-none max-w-[200px]">
+            <option value="TODOS">Todos</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label class="text-sm font-bold text-gray-600">Status:</label>
+          <select id="filtro-status" onchange="aplicarFiltros()" class="border rounded px-2 py-1 text-sm outline-none">
+            <option value="TODOS">Todos</option>
+            <option value="Verificados">Verificados</option>
+            <option value="Deslocado">Deslocado</option>
+            <option value="Pendente">Pendente</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2 text-xs font-bold text-gray-600 items-center">
+        <span>Resumo por Área (conforme filtros):</span>
+        <div id="resumo-areas" class="flex flex-wrap gap-2"></div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div class="lg:col-span-3 bg-white rounded-lg shadow p-4 overflow-x-auto">
+        <div class="max-h-[70vh] overflow-y-auto">
+          <table class="tabela-aderencia" id="tabela-analise">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Link</th>
+                <th>Pacote</th>
+                <th>Data</th>
+                <th>Área</th>
+                <th>Operador</th>
+                <th>Comentário</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="leitor-panel rounded-lg shadow p-6 flex flex-col items-center justify-center">
+        <h3 class="text-sm font-bold text-[#2D3277] uppercase mb-4 text-center">Leitor de Código de Barras</h3>
+        <div id="barcode-container" class="w-full flex justify-center mb-4 bg-white p-2 rounded">
+          <svg id="barcode"></svg>
+        </div>
+        <div class="text-center mt-2">
+          <p class="text-xs text-gray-500 font-bold mb-1">Navegue com as setas:</p>
+          <div class="flex justify-center gap-4 text-2xl text-gray-400">
+            <i class="fa-solid fa-arrow-up"></i>
+            <i class="fa-solid fa-arrow-down"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELA: CUSTOM (4° Custom) -->
+  <div id="screen-custom" class="screen">
+    <div class="bg-white rounded-lg shadow p-6 mb-4">
+      <h2 class="text-xl font-bold text-[#2D3277] mb-4">4° Custom</h2>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-bold text-gray-700 mb-2">Upload de Arquivo(s) CSV (Extrai apenas as IDs)</label>
+        <input type="file" id="custom-file-input" accept=".csv" multiple class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"/>
+        <p class="text-xs text-blue-600 mt-1"><i class="fa-solid fa-circle-info"></i> Pode selecionar vários arquivos. As IDs duplicadas serão removidas automaticamente.</p>
+      </div>
+
+      <p class="text-sm text-gray-500 mb-2">Ou cole as IDs abaixo (uma por linha):</p>
+      <textarea id="custom-textarea" class="w-full h-32 border rounded p-3 text-sm font-mono focus:outline-none focus:border-blue-500 mb-4" placeholder="48292307435&#10;48297651750..."></textarea>
+      
+      <div class="flex justify-end">
+        <button onclick="processarCustom()" class="bg-[#2D3277] text-white px-4 py-2 rounded text-sm hover:opacity-80"><i class="fa-solid fa-list-check mr-2"></i>Gerar Lista</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div class="lg:col-span-3 bg-white rounded-lg shadow p-4 overflow-x-auto">
+        <div class="max-h-[60vh] overflow-y-auto">
+          <table class="tabela-aderencia" id="tabela-custom">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Link</th>
+                <th>Pacote</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="leitor-panel rounded-lg shadow p-6 flex flex-col items-center justify-center">
+        <h3 class="text-sm font-bold text-[#2D3277] uppercase mb-4 text-center">Leitor de Código de Barras</h3>
+        <div id="barcode-container-custom" class="w-full flex justify-center mb-4 bg-white p-2 rounded">
+          <svg id="barcode-custom"></svg>
+        </div>
+        <div class="text-center mt-2">
+          <p class="text-xs text-gray-500 font-bold mb-1">Navegue com as setas:</p>
+          <div class="flex justify-center gap-4 text-2xl text-gray-400">
+            <i class="fa-solid fa-arrow-up"></i>
+            <i class="fa-solid fa-arrow-down"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELA: AUDITORIA (5° Auditoria) -->
+  <div id="screen-auditoria" class="screen">
+    <div class="bg-white rounded-lg shadow p-6 mb-4 border-t-4 border-purple-600">
+      <h2 class="text-xl font-bold text-purple-800 mb-4">5° Auditoria de Pendentes</h2>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-bold text-gray-700 mb-2">Upload de Arquivo(s) CSV (Extrai apenas as IDs)</label>
+        <input type="file" id="auditoria-file-input" accept=".csv" multiple class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"/>
+        <p class="text-xs text-purple-600 mt-1"><i class="fa-solid fa-circle-info"></i> Pode selecionar vários arquivos. As IDs duplicadas serão removidas automaticamente.</p>
+      </div>
+
+      <p class="text-sm text-gray-500 mb-2">Ou cole abaixo as IDs que foram <b>Verificadas no dia anterior</b> (uma por linha):</p>
+      <textarea id="auditoria-textarea" class="w-full h-32 border rounded p-3 text-sm font-mono focus:outline-none focus:border-purple-500 mb-4" placeholder="48292307435&#10;48297651750..."></textarea>
+      
+      <div class="flex justify-end">
+        <button onclick="executarAuditoria()" class="bg-purple-700 text-white px-4 py-2 rounded text-sm hover:opacity-80"><i class="fa-solid fa-clipboard-check mr-2"></i>Cruzar Dados</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div class="lg:col-span-3 bg-white rounded-lg shadow p-4 overflow-x-auto">
+        <h3 class="text-sm font-bold text-gray-700 mb-2" id="auditoria-titulo">Aguardando cruzamento...</h3>
+        <div class="max-h-[60vh] overflow-y-auto">
+          <table class="tabela-aderencia" id="tabela-auditoria">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Link</th>
+                <th>Pacote</th>
+                <th>Status Atual</th>
+                <th>Área</th>
+                <th>Operador</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="leitor-panel rounded-lg shadow p-6 flex flex-col items-center justify-center border-purple-600">
+        <h3 class="text-sm font-bold text-purple-800 uppercase mb-4 text-center">Leitor de Código de Barras</h3>
+        <div id="barcode-container-auditoria" class="w-full flex justify-center mb-4 bg-white p-2 rounded">
+          <svg id="barcode-auditoria"></svg>
+        </div>
+        <div class="text-center mt-2">
+          <p class="text-xs text-gray-500 font-bold mb-1">Navegue com as setas:</p>
+          <div class="flex justify-center gap-4 text-2xl text-gray-400">
+            <i class="fa-solid fa-arrow-up"></i>
+            <i class="fa-solid fa-arrow-down"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbwEWSJsRHSpG4bKxpySm7WZKvmFUiHe_6t2yGRud_9G3P4sB5sUifFUylyNOTwLmpsCvg/exec";
+
+    let dadosBrutos = [];
+    let dadosFiltrados = [];
+    let linhaSelecionadaIndex = -1;
+
+    let dadosCustom = [];
+    let linhaCustomIndex = -1;
+
+    let dadosAuditoria = [];
+    let linhaAuditoriaIndex = -1;
+
+    async function callAPI(action, payload = {}) {
+      const loader = document.getElementById("loader-overlay");
+      loader.classList.add("show");
+      try {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action, payload }),
+        });
+        const data = await response.json();
+        if (data.erro) throw new Error(data.erro);
+        return data;
+      } catch (err) {
+        Swal.fire("Erro", err.message, "error");
+        throw err;
+      } finally {
+        loader.classList.remove("show");
+      }
+    }
+
+    function abrirTela(id) {
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      document.getElementById(id).classList.add("active");
+    }
+
+    // ========== FUNÇÕES DE LEITURA E COMBINAÇÃO DE MÚLTIPLOS CSV ==========
+
+    // Lê um arquivo e retorna como texto
+    function lerArquivo(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = e => reject(e);
+        reader.readAsText(file);
+      });
+    }
+
+    // Combina vários CSVs completos (mantém o cabeçalho apenas do 1º)
+    async function combinarCsvsCompletos(files) {
+      let textoFinal = "";
+      for (let i = 0; i < files.length; i++) {
+        const text = await lerArquivo(files[i]);
+        const linhas = text.trim().split('\n');
+        
+        if (i === 0) {
+          textoFinal = linhas.join('\n'); // Pega tudo do primeiro
+        } else {
+          // Pula a primeira linha (cabeçalho) dos arquivos seguintes
+          if (linhas.length > 1) {
+            textoFinal += "\n" + linhas.slice(1).join('\n');
+          }
+        }
+      }
+      return textoFinal;
+    }
+
+    // Combina vários CSVs extraindo apenas a 1ª coluna (IDs) e removendo duplicadas
+    async function combinarCsvsIds(files) {
+      const setIds = new Set();
+      for (let i = 0; i < files.length; i++) {
+        const text = await lerArquivo(files[i]);
+        const linhas = text.trim().split('\n');
+        
+        for (let j = 0; j < linhas.length; j++) {
+          let linha = linhas[j].trim();
+          if (!linha) continue;
+          
+          // Pega a primeira coluna, remove aspas
+          let id = linha.split(',')[0].replace(/"/g, '').trim();
+          
+          // Ignora cabeçalho e vazios
+          if (id && id.toLowerCase() !== 'pacote' && id.toLowerCase() !== 'id') {
+            setIds.add(id);
+          }
+        }
+      }
+      return Array.from(setIds).join('\n'); // Transforma o Set de volta em string
+    }
+
+
+    // ========== LISTENERS DE UPLOAD (MÚLTIPLOS ARQUIVOS) ==========
+    
+    // Upload Tela 1 (Completo)
+    document.getElementById('file-input').addEventListener('change', async function(e) {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const textoCombinado = await combinarCsvsCompletos(files);
+      document.getElementById('csv-textarea').value = textoCombinado;
+    });
+
+    // Upload Tela Custom (Apenas IDs)
+    document.getElementById('custom-file-input').addEventListener('change', async function(e) {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const idsCombinadas = await combinarCsvsIds(files);
+      document.getElementById('custom-textarea').value = idsCombinadas;
+    });
+
+    // Upload Tela Auditoria (Apenas IDs)
+    document.getElementById('auditoria-file-input').addEventListener('change', async function(e) {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const idsCombinadas = await combinarCsvsIds(files);
+      document.getElementById('auditoria-textarea').value = idsCombinadas;
+    });
+
+
+    // ========== AÇÃO 1: TRAZER E VERIFICAR ==========
+    async function executarTrazerEVerificar() {
+      const csvText = document.getElementById('csv-textarea').value.trim();
+      
+      try {
+        if (csvText) {
+          await callAPI("salvarDadosUsar", { csvText });
+        }
+        
+        const res = await callAPI("trazerEVerificar");
+        Swal.fire("Sucesso", `Análise concluída! ${res.totalLinhas} linhas processadas na aba Analise.`, "success");
+        
+        document.getElementById('csv-textarea').value = "";
+        document.getElementById('file-input').value = "";
+        abrirTela('screen-menu');
+        
+      } catch (e) { console.error(e); }
+    }
+
+    // ========== AÇÃO 2: IMPORTAR ÁREAS ==========
+    async function executarImportarAreas() {
+      const confirm = await Swal.fire({
+        title: "Importar Áreas?",
+        text: "Isso vai distribuir os pacotes 'Deslocados' da aba Analise para as abas de cada área.",
+        icon: "question", showCancelButton: true, confirmButtonText: "Sim, importar", confirmButtonColor: "#FFD700"
+      });
+      if (!confirm.isConfirmed) return;
+      
+      try {
+        const res = await callAPI("importarAreas");
+        
+        let msgHtml = `<p class="mb-2 text-sm text-gray-600">Total de pacotes deslocados encontrados na Análise: <b>${res.totalDeslocados}</b></p>`;
+        
+        if (res.totalDeslocados > 0) {
+          msgHtml += `<ul class="text-left bg-gray-50 p-4 rounded border text-sm font-mono mt-2">`;
+          res.distribuicao.forEach(item => {
+            msgHtml += `<li><i class="fa-solid fa-check text-green-500 mr-2"></i>${item}</li>`;
+          });
+          msgHtml += `</ul>`;
+        } else {
+          msgHtml += `<p class="text-red-500 mt-2">Nenhum item foi enviado. Verifique se na coluna G (status) da aba Análise está escrito exatamente "Deslocado".</p>`;
+        }
+
+        Swal.fire({
+          title: "Resultado da Importação",
+          html: msgHtml,
+          icon: res.totalDeslocados > 0 ? "success" : "warning",
+          confirmButtonText: "Entendi",
+          confirmButtonColor: "#2D3277"
+        });
+
+      } catch (e) { console.error(e); }
+    }
+
+    // ========== AÇÃO 6: ATUALIZAR QUERY ==========
+    async function executarRodarQuery() {
+      const confirm = await Swal.fire({
+        title: "Atualizar Query?",
+        text: "Isso irá atualizar os dados do BigQuery. Pode levar alguns segundos.",
+        icon: "question", showCancelButton: true, confirmButtonText: "Sim, atualizar", confirmButtonColor: "#10b981"
+      });
+      if (!confirm.isConfirmed) return;
+      
+      try {
+        await callAPI("rodarQuery");
+        Swal.fire("Concluído", "Query do BigQuery executada com sucesso!", "success");
+      } catch (e) { console.error(e); }
+    }
+
+    // ========== AÇÃO 3: ANALISAR ==========
+    async function carregarAderencia() {
+      try {
+        const res = await callAPI("getDadosAnalise");
+        dadosBrutos = res.dados || [];
+        
+        const operadores = [...new Set(dadosBrutos.map(d => d.operador))].filter(o => o).sort();
+        const selOp = document.getElementById("filtro-operador");
+        selOp.innerHTML = '<option value="TODOS">Todos</option>' + operadores.map(o => `<option value="${o}">${o}</option>`).join("");
+
+        aplicarFiltros();
+      } catch (e) { console.error(e); }
+    }
+
+    function aplicarFiltros() {
+      const fArea = document.getElementById("filtro-area").value;
+      const fOp = document.getElementById("filtro-operador").value;
+      const fStatus = document.getElementById("filtro-status").value;
+
+      // 1. Contagem
+      const dadosParaContagem = dadosBrutos.filter(row => {
+        const matchOp = (fOp === "TODOS" || row.operador === fOp);
+        const matchStatus = (fStatus === "TODOS" || row.status === fStatus);
+        return matchOp && matchStatus;
+      });
+
+      const contagemAreas = {
+        "Sorting": 0, "Problem Solving": 0, "Returns": 0, "Buffered": 0, "Missort": 0, "VAZIA": 0
+      };
+
+      dadosParaContagem.forEach(row => {
+        const areaLower = row.area.toLowerCase();
+        let encontrou = false;
+        for (const k in contagemAreas) {
+          if (k !== "VAZIA" && areaLower.includes(k.toLowerCase())) {
+            contagemAreas[k]++;
+            encontrou = true;
+            break;
+          }
+        }
+        if (!encontrou || row.area.trim() === "") {
+          contagemAreas["VAZIA"]++;
+        }
+      });
+
+      const divResumo = document.getElementById("resumo-areas");
+      divResumo.innerHTML = "";
+      for (const [area, qtd] of Object.entries(contagemAreas)) {
+        if (qtd > 0 || area === "VAZIA") {
+          const label = area === "VAZIA" ? "Vazia" : area;
+          const bg = area === "VAZIA" ? "bg-gray-200 text-gray-700" : "bg-blue-100 text-blue-800";
+          divResumo.innerHTML += `<span class="${bg} px-2 py-1 rounded border">${label}: ${qtd}</span>`;
+        }
+      }
+
+      // 2. Filtro Tabela
+      dadosFiltrados = dadosBrutos.filter(row => {
+        const matchOp = (fOp === "TODOS" || row.operador === fOp);
+        const matchStatus = (fStatus === "TODOS" || row.status === fStatus);
+        
+        let matchArea = false;
+        if (fArea === "TODAS") {
+          matchArea = true;
+        } else if (fArea === "VAZIA") {
+          matchArea = (row.area.trim() === "");
+        } else {
+          matchArea = row.area.toLowerCase().includes(fArea.toLowerCase());
+        }
+
+        return matchOp && matchStatus && matchArea;
+      });
+
+      renderizarTabela();
+    }
+
+    function renderizarTabela() {
+      const tbody = document.querySelector("#tabela-analise tbody");
+      tbody.innerHTML = "";
+      
+      if (dadosFiltrados.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500 py-4">Nenhum item encontrado com esses filtros.</td></tr>';
+        linhaSelecionadaIndex = -1;
+        document.getElementById("barcode").innerHTML = "";
+        return;
+      }
+
+      if (linhaSelecionadaIndex >= dadosFiltrados.length) {
+        linhaSelecionadaIndex = -1;
+      }
+
+      dadosFiltrados.forEach((row, index) => {
+        const tr = document.createElement("tr");
+        tr.dataset.index = index;
+        if (index === linhaSelecionadaIndex) tr.classList.add("selected");
+        tr.onclick = () => selecionarLinha(index);
+        
+        let statusClass = "";
+        if (row.status === "Verificados") statusClass = "status-verificados";
+        else if (row.status === "Pendente") statusClass = "status-pendente";
+        else if (row.status === "Deslocado") statusClass = "status-deslocado";
+
+        const linkMl = `https://envios.adminml.com/logistics/package-management/package/${row.pacote}`;
+
+        tr.innerHTML = `
+          <td class="text-gray-400 font-mono">${index + 1}</td>
+          <td><a href="${linkMl}" target="_blank" class="text-blue-500 hover:text-blue-700" title="Abrir Gestão"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td>
+          <td><strong>${row.pacote}</strong></td>
+          <td>${row.data}</td>
+          <td>${row.area || '<span class="text-gray-400 italic">Vazia</span>'}</td>
+          <td>${row.operador}</td>
+          <td>${row.comentario}</td>
+          <td><span class="${statusClass}">${row.status}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function selecionarLinha(index) {
+      if (index < 0 || index >= dadosFiltrados.length) return;
+      linhaSelecionadaIndex = index;
+      
+      document.querySelectorAll("#tabela-analise tbody tr").forEach(tr => tr.classList.remove("selected"));
+      const trSelected = document.querySelector(`#tabela-analise tbody tr[data-index="${index}"]`);
+      if (trSelected) {
+        trSelected.classList.add("selected");
+        trSelected.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+
+      atualizarBarcode('barcode', dadosFiltrados[index].pacote);
+    }
+
+    // ========== AÇÃO 4: ABA CUSTOM ==========
+    function processarCustom() {
+      const texto = document.getElementById("custom-textarea").value;
+      const ids = texto.split("\n").map(l => l.trim()).filter(l => l !== "");
+      
+      dadosCustom = ids.map(id => ({ pacote: id }));
+      linhaCustomIndex = -1;
+      
+      renderizarTabelaCustom();
+      document.getElementById("barcode-custom").innerHTML = "";
+    }
+
+    function renderizarTabelaCustom() {
+      const tbody = document.querySelector("#tabela-custom tbody");
+      tbody.innerHTML = "";
+      
+      if (dadosCustom.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-gray-500 py-4">Nenhuma ID inserida.</td></tr>';
+        return;
+      }
+
+      dadosCustom.forEach((row, index) => {
+        const tr = document.createElement("tr");
+        tr.dataset.index = index;
+        if (index === linhaCustomIndex) tr.classList.add("selected");
+        tr.onclick = () => selecionarLinhaCustom(index);
+
+        const linkMl = `https://envios.adminml.com/logistics/package-management/package/${row.pacote}`;
+
+        tr.innerHTML = `
+          <td class="text-gray-400 font-mono">${index + 1}</td>
+          <td><a href="${linkMl}" target="_blank" class="text-blue-500 hover:text-blue-700" title="Abrir Gestão"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td>
+          <td><strong>${row.pacote}</strong></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function selecionarLinhaCustom(index) {
+      if (index < 0 || index >= dadosCustom.length) return;
+      linhaCustomIndex = index;
+      
+      document.querySelectorAll("#tabela-custom tbody tr").forEach(tr => tr.classList.remove("selected"));
+      const trSelected = document.querySelector(`#tabela-custom tbody tr[data-index="${index}"]`);
+      if (trSelected) {
+        trSelected.classList.add("selected");
+        trSelected.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+
+      atualizarBarcode('barcode-custom', dadosCustom[index].pacote);
+    }
+
+    // ========== AÇÃO 5: ABA AUDITORIA ==========
+    async function carregarAuditoria() {
+      if (dadosBrutos.length === 0) {
+        try {
+          const res = await callAPI("getDadosAnalise");
+          dadosBrutos = res.dados || [];
+        } catch (e) { console.error(e); }
+      }
+    }
+
+    function executarAuditoria() {
+      const texto = document.getElementById("auditoria-textarea").value;
+      const idsOntem = texto.split("\n").map(l => l.trim()).filter(l => l !== "");
+      
+      if (idsOntem.length === 0) {
+        return Swal.fire("Atenção", "Cole as IDs verificadas de ontem.", "warning");
+      }
+
+      const pendentesHoje = dadosBrutos.filter(row => row.status === "Pendente");
+      dadosAuditoria = pendentesHoje.filter(row => idsOntem.includes(row.pacote));
+      linhaAuditoriaIndex = -1;
+
+      renderizarTabelaAuditoria();
+      document.getElementById("barcode-auditoria").innerHTML = "";
+
+      const titulo = document.getElementById("auditoria-titulo");
+      if (dadosAuditoria.length > 0) {
+        titulo.innerHTML = `<span class="text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> Alerta: ${dadosAuditoria.length} pacotes verificados ontem ainda constam como Pendentes hoje!</span>`;
+      } else {
+        titulo.innerHTML = `<span class="text-green-600"><i class="fa-solid fa-check"></i> Tudo certo! Nenhuma ID de ontem ficou pendente hoje.</span>`;
+      }
+    }
+
+    function renderizarTabelaAuditoria() {
+      const tbody = document.querySelector("#tabela-auditoria tbody");
+      tbody.innerHTML = "";
+      
+      if (dadosAuditoria.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500 py-4">Nenhuma divergência encontrada.</td></tr>';
+        return;
+      }
+
+      dadosAuditoria.forEach((row, index) => {
+        const tr = document.createElement("tr");
+        tr.dataset.index = index;
+        if (index === linhaAuditoriaIndex) tr.classList.add("selected");
+        tr.onclick = () => selecionarLinhaAuditoria(index);
+
+        const linkMl = `https://envios.adminml.com/logistics/package-management/package/${row.pacote}`;
+
+        tr.innerHTML = `
+          <td class="text-gray-400 font-mono">${index + 1}</td>
+          <td><a href="${linkMl}" target="_blank" class="text-blue-500 hover:text-blue-700" title="Abrir Gestão"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td>
+          <td><strong>${row.pacote}</strong></td>
+          <td><span class="status-pendente">${row.status}</span></td>
+          <td>${row.area || '<span class="text-gray-400 italic">Vazia</span>'}</td>
+          <td>${row.operador}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function selecionarLinhaAuditoria(index) {
+      if (index < 0 || index >= dadosAuditoria.length) return;
+      linhaAuditoriaIndex = index;
+      
+      document.querySelectorAll("#tabela-auditoria tbody tr").forEach(tr => tr.classList.remove("selected"));
+      const trSelected = document.querySelector(`#tabela-auditoria tbody tr[data-index="${index}"]`);
+      if (trSelected) {
+        trSelected.classList.add("selected");
+        trSelected.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+
+      atualizarBarcode('barcode-auditoria', dadosAuditoria[index].pacote);
+    }
+
+    // ========== FUNÇÃO GERAL DE CÓDIGO DE BARRAS ==========
+    function atualizarBarcode(elementId, valor) {
+      if (!valor) return;
+      const svgElement = document.getElementById(elementId);
+      try {
+        JsBarcode(svgElement, valor, {
+          format: "CODE128",
+          width: 4,
+          height: 160,
+          displayValue: true,
+          fontSize: 24,
+          font: "monospace",
+          margin: 10,
+          background: "#ffffff",
+          lineColor: "#000000"
+        });
+      } catch (e) { console.error("Erro barcode:", e); }
+    }
+
+    // ========== NAVEGAÇÃO POR TECLADO ==========
+    document.addEventListener('keydown', (e) => {
+      const isAnalisar = document.getElementById('screen-analisar').classList.contains('active');
+      const isCustom = document.getElementById('screen-custom').classList.contains('active');
+      const isAuditoria = document.getElementById('screen-auditoria').classList.contains('active');
+
+      if (isAnalisar) {
+        if (dadosFiltrados.length === 0) return;
+        if (e.key === "ArrowDown") { e.preventDefault(); selecionarLinha(linhaSelecionadaIndex < 0 ? 0 : linhaSelecionadaIndex + 1); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); selecionarLinha(linhaSelecionadaIndex - 1); }
+      } 
+      
+      if (isCustom) {
+        if (dadosCustom.length === 0) return;
+        if (e.key === "ArrowDown") { e.preventDefault(); selecionarLinhaCustom(linhaCustomIndex < 0 ? 0 : linhaCustomIndex + 1); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); selecionarLinhaCustom(linhaCustomIndex - 1); }
+      }
+
+      if (isAuditoria) {
+        if (dadosAuditoria.length === 0) return;
+        if (e.key === "ArrowDown") { e.preventDefault(); selecionarLinhaAuditoria(linhaAuditoriaIndex < 0 ? 0 : linhaAuditoriaIndex + 1); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); selecionarLinhaAuditoria(linhaAuditoriaIndex - 1); }
+      }
+    });
+  </script>
+</body>
+</html>

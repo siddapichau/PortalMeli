@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · Portal Interno</title>
+<style>
+:root{--yellow:#ffe600;--blue:#2d3277;--bg:#151923;--card:#fff;--text:#292929;--muted:#777;--border:#e5e5e5;--red:#c62828}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:22px;background:radial-gradient(circle at 15% 15%,#343c60,transparent 35%),var(--bg);font-family:system-ui,-apple-system,sans-serif;color:var(--text)}
+.card{width:min(100%,420px);background:var(--card);padding:clamp(25px,6vw,39px);border-radius:17px;box-shadow:0 25px 80px #0005}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:30px;font-weight:850;font-size:18px}.brand img{height:42px;max-width:150px;object-fit:contain}.brand span{border-left:1px solid #ddd;padding-left:12px;color:var(--blue)}
+.kicker{font-size:10px;font-weight:850;letter-spacing:1.4px;color:var(--blue)}h1{font-size:27px;margin:8px 0}p{font-size:13px;color:var(--muted);line-height:1.65;margin:0 0 25px}
+label{display:block;font-size:12px;font-weight:750;margin:17px 0 7px}input{width:100%;padding:13px;border:1px solid var(--border);border-radius:9px;font:inherit;font-size:13px}input:focus{outline:2px solid var(--blue);border-color:transparent}
+.password-wrap{position:relative}.password-wrap input{padding-right:48px}.eye{position:absolute;right:5px;top:5px;width:38px;height:38px;border:0;background:transparent;border-radius:7px;cursor:pointer}
+.submit{width:100%;margin-top:23px;padding:14px;border:0;border-radius:9px;background:var(--yellow);color:#222;font-weight:850;font-size:13px;cursor:pointer}.submit:disabled{opacity:.6;cursor:wait}
+.error{display:none;padding:12px;margin-top:15px;background:#fff0f0;color:var(--red);border-radius:8px;font-size:12px;line-height:1.5}.error.show{display:block}.error.success{background:#eaf8ef;color:#176b3a}
+.request{display:block;width:100%;margin-top:14px;padding:13px;border:1px solid #2d3277;border-radius:9px;background:#f3f4ff;color:#2d3277;font-weight:850;font-size:12px;text-align:center;cursor:pointer}.request:hover{background:#e7e9ff}.requestAccess{display:block;width:100%;margin:15px 0 5px;padding:13px;border:1px solid #2d3277;border-radius:10px;background:#eef0ff;color:#2d3277;font-weight:850;text-align:center;text-decoration:none}.requestAccess:hover{background:#e2e5ff}.bottom{display:flex;justify-content:space-between;gap:12px;margin-top:22px;font-size:11px}.bottom a{color:var(--blue);font-weight:750;text-decoration:none}.bottom span{color:#999}
+
+.modal-backdrop{position:fixed;inset:0;z-index:20;background:#090d18b8;backdrop-filter:blur(5px);display:none;place-items:center;padding:18px}
+.modal-backdrop.open{display:grid}.modal{width:min(100%,440px);background:#fff;border-radius:18px;padding:26px;box-shadow:0 28px 90px #0005;animation:modalIn .18s ease-out}
+@keyframes modalIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:8px}.modal-head h2{font-size:21px;color:var(--blue);margin:0}.modal-head p{margin:7px 0 0;font-size:13px}.close-modal{width:34px;height:34px;border:0;border-radius:9px;background:#f2f3f8;color:#333;font-size:20px;cursor:pointer}
+.modal .submit{margin-top:20px}.cancel{width:100%;margin-top:9px;padding:12px;border:1px solid #ddd;border-radius:9px;background:#fff;color:#555;font-weight:750;cursor:pointer}
+@media(max-width:480px){.card{padding:25px}.brand{font-size:16px}.brand img{max-width:125px;height:36px}.modal{padding:22px}}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand"><img src="https://upload.wikimedia.org/wikipedia/pt/0/04/Logotipo_MercadoLivre.png" alt="Mercado Livre"><span>Portal Interno</span></div>
+  <div class="kicker">PORTAL CORPORATIVO</div>
+  <h1>Bem-vindo de volta</h1>
+  <p>Entre com suas credenciais para acessar as ferramentas e páginas liberadas para seu perfil.</p>
+  <form id="loginForm">
+    <label for="email">E-mail</label>
+    <input id="email" type="text" autocomplete="username" placeholder="seu.email@empresa.com" required>
+    <label for="password">Senha</label>
+    <div class="password-wrap">
+      <input id="password" type="password" autocomplete="current-password" placeholder="Digite sua senha" required>
+      <button class="eye" id="togglePassword" type="button" aria-label="Mostrar senha">👁</button>
+    </div>
+    <button class="submit" id="submitButton" type="submit">Entrar no portal →</button>
+    <div class="error" id="errorMessage" role="alert"></div>
+    <button class="request" id="requestAccess" type="button">✉ Solicitar acesso ao portal</button>
+  </form>
+  <div class="bottom"><span>Ambiente interno protegido</span><span>Solicitação sujeita à aprovação</span></div>
+</main>
+<section class="modal-backdrop" id="requestModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
+ <div class="modal">
+  <div class="modal-head"><div><div class="kicker">NOVO USUÁRIO</div><h2 id="requestTitle">Solicitar acesso</h2><p>Preencha seus dados e crie uma senha. O acesso será liberado após análise.</p></div><button class="close-modal" id="closeRequest" type="button" aria-label="Fechar">×</button></div>
+  <form id="requestForm">
+   <label for="requestName">Nome completo</label><input id="requestName" name="nome" autocomplete="name" placeholder="Como podemos identificar você?" required maxlength="120">
+   <label for="requestEmail">E-mail corporativo</label><input id="requestEmail" name="email" type="email" autocomplete="email" placeholder="voce@empresa.com" required maxlength="180">
+   <label for="requestPassword">Senha</label><input id="requestPassword" type="password" required minlength="8" placeholder="Crie uma senha (mínimo 8 caracteres)">
+   <label for="requestConfirmPassword">Confirmar Senha</label><input id="requestConfirmPassword" type="password" required minlength="8" placeholder="Repita a senha">
+   <button class="submit" id="sendRequest" type="submit">Enviar solicitação</button>
+   <button class="cancel" id="cancelRequest" type="button">Cancelar</button>
+  </form>
+ </div>
+</section>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const apiUrl="https://script.google.com/macros/s/AKfycbxHUc58l6dqttLAGaAkPdK5IQxIAMCeOQwMlso0lmiCasjurGlammjV2rTgJTqPQStq/exec"; localStorage.setItem("apiUrl",apiUrl);
+const requestModal=$("requestModal"), requestForm=$("requestForm");
+$("requestAccess").addEventListener("click",()=>{requestModal.classList.add("open");requestModal.setAttribute("aria-hidden","false");$("requestName").focus();});
+$("closeRequest").addEventListener("click",closeRequestModal);
+$("cancelRequest").addEventListener("click",closeRequestModal);
+requestModal.addEventListener("click",e=>{if(e.target===requestModal)closeRequestModal()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeRequestModal()});
+function closeRequestModal(){requestModal.classList.remove("open");requestModal.setAttribute("aria-hidden","true")}
+requestForm.addEventListener("submit",async e=>{
+ e.preventDefault();
+ const nome=$("requestName").value.trim(),email=$("requestEmail").value.trim();
+ const senha=$("requestPassword").value, confirma=$("requestConfirmPassword").value;
+ 
+ if(senha!==confirma){showError("As senhas não coincidem.");return;}
+
+ const btn=$("sendRequest");btn.disabled=true;btn.textContent="Enviando solicitação...";
+ try{
+  const response=await fetch(apiUrl,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"solicitarAcesso",email,nome,senha})});
+  const result=await response.json();
+  if(!response.ok||!result.ok)throw Error(result.error||"Não foi possível registrar a solicitação.");
+  closeRequestModal();requestForm.reset();showError(result.message||"Solicitação registrada. O administrador analisará seu pedido.");$("errorMessage").classList.add("success");
+ }catch(error){showError(error.message==="Failed to fetch"?"Não foi possível conectar à API. Tente novamente.":error.message)}
+ finally{btn.disabled=false;btn.textContent="Enviar solicitação"}
+});
+function showError(message){$("errorMessage").textContent=message;$("errorMessage").classList.add("show");}
+$("togglePassword").addEventListener("click",()=>{
+  const input=$("password");input.type=input.type==="password"?"text":"password";
+  $("togglePassword").setAttribute("aria-label",input.type==="password"?"Mostrar senha":"Ocultar senha");
+});
+$("loginForm").addEventListener("submit",async event=>{
+  event.preventDefault();$("errorMessage").classList.remove("show","success");
+  const email=$("email").value.trim();const senha=$("password").value;
+  if(!email||!senha){showError("Informe seu e-mail e sua senha.");return;}
+  $("submitButton").disabled=true;$("submitButton").textContent="Verificando acesso...";
+  try{
+    const response=await fetch(apiUrl,{
+      method:"POST",redirect:"follow",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({action:"login",email,senha,userAgent:navigator.userAgent})
+    });
+    if(!response.ok)throw new Error("Erro de comunicação com a API (HTTP "+response.status+").");
+    const result=await response.json();
+    if(!result.ok)throw new Error(result.error||"Credenciais inválidas.");
+    const data=result.data||result;
+    if(!data.token)throw new Error("A API não retornou um token de sessão.");
+    localStorage.setItem("token",data.token);
+    localStorage.setItem("nome",data.nome||"");
+    localStorage.setItem("email",data.email||email);
+    localStorage.setItem("perfil",data.perfil||"user");
+    localStorage.setItem("expiraEm",data.expiraEm||"");
+    window.location.replace(new URL("portal.html",window.location.href).href);
+  }catch(error){
+    showError(error.message==="Failed to fetch"
+      ?"Não foi possível conectar à API. Verifique a URL e a implantação do Apps Script."
+      :error.message);
+  }finally{$("submitButton").disabled=false;$("submitButton").textContent="Entrar no portal →";}
+});
+</script>
+</body>
+</html>

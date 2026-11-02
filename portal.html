@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FFE600"><title>Portal de Controles Internos</title>
+<style>
+:root{--yellow:#FFE600;--sidebar:#333;--hover:#484848;--bg:#F5F5F5;--blue:#2D3277;--red:#E53935;--line:#e5e5e5;--top:54px;--left:250px;--right:245px}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;width:100%;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;color:#333;background:var(--bg)}button{font:inherit;cursor:pointer}
+.topbar{height:var(--top);position:fixed;inset:0 0 auto;z-index:100;background:var(--yellow);display:flex;align-items:center;justify-content:space-between;padding:0 18px;box-shadow:0 1px 4px #0002}.lefthead,.righthead{display:flex;align-items:center;gap:12px;min-width:0}.iconbtn{width:36px;height:36px;border:0;border-radius:50%;background:transparent;font-size:22px}.iconbtn:hover{background:#0001}.brand{display:flex;align-items:center;gap:9px;font-size:18px;font-weight:850;white-space:nowrap;cursor:pointer}.brandmark{height:34px;width:auto;max-width:150px;object-fit:contain;display:block}
+.user{position:relative;display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:20px;transition:background .2s}
+.user:hover{background:rgba(0,0,0,0.06)}
+.avatar-wrapper{position:relative;display:flex}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--blue);color:white;display:grid;place-items:center;font-weight:800;font-size:13px;box-shadow:0 2px 5px rgba(0,0,0,0.15)}
+.status-dot{position:absolute;bottom:0;right:0;width:10px;height:10px;background:#21a65b;border:2px solid var(--yellow);border-radius:50%}
+.caret{font-size:14px;color:#333;font-weight:bold}
+.user-menu{position:absolute;right:0;top:calc(100% + 12px);min-width:200px;padding:7px;background:white;border:1px solid #e6e6e6;border-radius:12px;box-shadow:0 12px 32px #0002;z-index:150;display:none}.user-menu.open{display:grid}.user-menu button{border:0;background:white;text-align:left;padding:11px;border-radius:7px;font-size:12px;font-weight:700;color:#333;transition:background .2s}.user-menu button:hover{background:#f5f6fa}.user-menu .danger{color:#d92d20}
+
+.layout{position:fixed;inset:var(--top) 0 0;display:grid;grid-template-columns:var(--left) minmax(0,1fr);overflow:hidden;transition:grid-template-columns .2s}.layout.collapsed{grid-template-columns:66px minmax(0,1fr)}.layout.no-right{grid-template-columns:var(--left) minmax(0,1fr) 0}.layout.collapsed.no-right{grid-template-columns:66px minmax(0,1fr)}
+.sidebar{background:var(--sidebar);color:white;display:flex;flex-direction:column;min-height:0;overflow:visible}.tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:13px 11px}.tab{border:0;border-radius:7px;background:transparent;color:#eee;min-height:35px;font-size:12px;font-weight:700}.tab.active{background:white;color:#222}.heading{padding:8px 16px;color:#aaa;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase}.menu{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 9px 12px}.itemwrap{display:flex;align-items:center;gap:2px}.itemwrap .item{flex:1;min-width:0}.fav-star{border:0;background:transparent;color:#aaa;border-radius:6px;width:28px;height:32px;font-size:17px;flex-shrink:0}.fav-star:hover,.fav-star.selected{color:#ffe600;background:#ffffff12}.itemwrap.nested .item{border-left:2px solid #666}.item{width:100%;display:flex;align-items:center;gap:10px;padding:10px;border:0;border-radius:7px;background:transparent;color:#fff;text-align:left;margin-bottom:3px;font-size:12px;min-height:42px}.item:hover{background:var(--hover)}.item.active{background:#555;box-shadow:inset 3px 0 var(--yellow)}.ico{width:22px;text-align:center;font-size:17px;flex-shrink:0}.label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.badge{font-size:9px;font-weight:800;padding:3px 5px;border-radius:4px;background:#ffffff20;flex-shrink:0}.badge.edit{color:var(--yellow);background:#ffe60020}.empty{padding:13px;color:#ddd;font-size:12px;line-height:1.6}.foot{padding:11px;border-top:1px solid #4a4a4a;display:grid;gap:8px}.foot button{min-height:39px;border:0;border-radius:7px;font-size:12px;font-weight:800}.admin{background:var(--yellow);color:#222}.logout{background:var(--red);color:white}.admin[hidden]{display:none}
+
+.main{display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0;padding:15px;background:var(--bg);height:100%}.mainhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0}.mainhead h1{font-size:clamp(15px,1.5vw,21px);line-height:1.3;color:var(--blue);font-weight:850}.subtitle{font-size:11px;color:#777;margin-top:4px}
+
+.top-banner{display:flex;align-items:center;gap:15px;background:var(--yellow);padding:8px 15px;border-radius:8px;flex-shrink:0;box-shadow:0 1px 3px #0001;flex-wrap:wrap}
+.news-title{font-size:11px;font-weight:850;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.updates-list{flex:1;display:flex;gap:8px;overflow-x:auto;min-height:38px;align-items:center;padding:2px 0}
+.updates-list::-webkit-scrollbar{height:4px}
+.updates-list::-webkit-scrollbar-thumb{background:#d9b900;border-radius:4px}
+.update-card{background:rgba(255,255,255,0.7);padding:4px 10px;border-radius:6px;font-size:10px;border-left:2px solid #2d3277;white-space:nowrap;box-shadow:0 1px 2px #0001}
+.update-card strong{display:block;font-size:10px;color:#2d3277}
+.update-card small{display:block;font-size:9px;color:#555;margin-top:2px}
+.update-empty{font-size:11px;color:#555;font-style:italic}
+.actions{display:flex;gap:6px;flex-shrink:0}
+.action{padding:6px 12px;border:1px solid #d9b900;border-radius:6px;background:rgba(255,255,255,0.8);font-size:11px;font-weight:700;transition:background .2s}
+.action:hover{background:#fff}
+
+/* CORREÇÃO DE ROLAGEM DO IFRAME */
+.framewrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid #e5e5e5;border-radius:10px;background:white;box-shadow:0 2px 10px #0000000b}
+iframe{width:100%;height:100%;border:0;display:block;overflow-y:auto}
+.loading{position:absolute;inset:0;z-index:2;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#ffffffed;color:var(--blue);font-size:13px}.loading.show{display:flex}.spinner{width:29px;height:29px;border:3px solid #ddd;border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+
+.team{min-width:0;overflow:auto;background:#fff;border-left:1px solid var(--line);padding:18px 14px}.team h2{font-size:14px;color:var(--blue);margin-bottom:20px}.onlinehead{font-size:10px;font-weight:850;letter-spacing:.5px;display:flex;align-items:center;gap:7px;margin-bottom:13px}.dot{width:8px;height:8px;border-radius:50%;background:#21a65b}.member{display:flex;align-items:center;gap:9px;margin-bottom:14px;min-width:0}.member .avatar{background:linear-gradient(135deg,#2d3277,#6d5dfc)!important;color:#fff!important;border:2px solid #fff;box-shadow:0 2px 8px #2d327744!important;font-weight:900;letter-spacing:.3px;width:32px;height:32px}.memberinfo{min-width:0;flex:1}.memberinfo strong{display:block;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.memberinfo small{display:block;font-size:10px;color:#777;margin-top:3px}.note{margin-top:6px;padding:10px;border-radius:8px;background:#f7f7f7;color:#777;font-size:10px;line-height:1.6}.divider{height:1px;background:var(--line);margin:20px 0 15px}.recenthead{font-size:11px;font-weight:850;margin-bottom:13px}.recent{display:flex;gap:9px;margin-bottom:14px}.recenticon{width:29px;height:29px;border-radius:8px;background:#f0f1ff;display:grid;place-items:center}.recentinfo{min-width:0}.recentinfo strong{font-size:10px;display:block;overflow-wrap:anywhere}.recentinfo small{display:block;font-size:9px;color:#777;margin-top:3px}.tag{display:inline-block;margin-top:5px;padding:3px 5px;border-radius:4px;background:#eee;font-size:8px;font-weight:850}
+.collapsed .tabs{grid-template-columns:1fr;padding:10px 5px}.collapsed .tab{font-size:0}.collapsed .tab:first-letter{font-size:15px}.collapsed .heading,.collapsed .label,.collapsed .badge,.collapsed .foot span{display:none}.collapsed .item{justify-content:center;padding:10px 4px}.collapsed .foot{padding:7px 4px}.collapsed .foot button{font-size:17px;padding:5px 0}.no-right .team{visibility:hidden;padding:0;overflow:hidden}
+.team{display:none}.layout.team-open{grid-template-columns:var(--left) minmax(0,1fr) var(--right)}.layout.team-open .team{display:block}.menu-group{position:relative}.group-trigger{width:100%;display:flex;align-items:center;gap:9px;padding:11px 10px;border:0;border-radius:8px;background:transparent;color:white;text-align:left;font-size:12px;font-weight:750;min-height:42px}.group-trigger:hover,.menu-group:focus-within .group-trigger{background:#484848}.group-arrow{margin-left:auto;color:#bbb}.submenu-flyout{display:none;position:fixed;z-index:9999;width:260px;background:white;color:#333;border:1px solid #e6e6e6;border-radius:0 10px 10px 10px;box-shadow:0 12px 28px #0003;padding:8px}.submenu-flyout .item{color:#303030;margin:0 0 3px}.submenu-flyout .item:hover{background:#f3f5fa}.submenu-flyout .item.active{background:#edf1ff;color:#2d3277}.submenu-flyout .fav-star{color:#aaa}.submenu-flyout .fav-star.selected{color:#c9a900}
+@media(max-width:820px){.layout.team-open{grid-template-columns:1fr}.layout.team-open .team{display:none}.submenu-flyout{position:static!important;width:auto;box-shadow:none;border-radius:8px;margin:0 0 5px 12px}}
+.toastbox{position:fixed;z-index:300;right:16px;bottom:16px;width:min(340px,calc(100vw - 32px));display:grid;gap:8px;pointer-events:none}.toast{padding:12px 15px;border-radius:8px;background:#292929;color:#fff;font-size:12px;box-shadow:0 4px 18px #0002}.toast.error{background:#b42318}.toast.success{background:#167442}
+.backdrop{display:none}
+@media(max-width:1050px){:root{--right:200px;--left:225px}.layout.team-open{grid-template-columns:var(--left) minmax(0,1fr) var(--right)}.main{padding:13px}}
+@media(max-width:820px){.layout,.layout.collapsed,.layout.no-right,.layout.collapsed.no-right{grid-template-columns:1fr}.sidebar{position:fixed;z-index:80;top:var(--top);bottom:0;left:0;width:min(280px,85vw);transform:translateX(-105%);transition:transform .2s;box-shadow:5px 0 20px #0003}.sidebar.mobile-open{transform:translateX(0)}.team{display:none}.backdrop.visible{display:block;position:fixed;z-index:70;inset:var(--top) 0 0;background:#0006}.collapsed .tabs{grid-template-columns:1fr 1fr;padding:13px 11px}.collapsed .tab{font-size:12px}.collapsed .heading,.collapsed .label,.collapsed .badge,.collapsed .foot span{display:initial}.collapsed .item{justify-content:flex-start;padding:10px}.collapsed .foot{padding:11px}.collapsed .foot button{font-size:12px;padding:9px}.top-banner{flex-direction:column;align-items:flex-start;gap:8px}.actions{width:100%;justify-content:flex-end}}
+@media(max-width:480px){.topbar{padding:0 9px}.lefthead,.righthead{gap:6px}.brand{font-size:15px}.brandmark{width:34px;height:23px}.userinfo{display:none}.main{padding:10px;gap:9px}.mainhead h1{font-size:15px}.subtitle{font-size:10px}.optional{display:none}.news-title{font-size:10px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style></head>
+<body>
+<header class="topbar">
+  <div class="lefthead"><button class="iconbtn" id="menuToggle" aria-label="Abrir menu">☰</button><div class="brand" onclick="welcome()"><img class="brandmark" src="https://upload.wikimedia.org/wikipedia/pt/0/04/Logotipo_MercadoLivre.png" alt="Mercado Livre" decoding="async"></div></div>
+  <div class="righthead">
+    <div class="user" id="userButton" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">
+      <div class="avatar-wrapper">
+        <div class="avatar" id="avatar">US</div>
+        <div class="status-dot"></div>
+      </div>
+      <span class="caret">⌄</span>
+      <div class="user-menu" id="userMenu">
+        <button id="profileAdmin">⚙ Painel administrativo</button>
+        <button class="danger" id="logoutButton">↪ Sair do portal</button>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="layout" id="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="tabs"><button class="tab active" id="allTab">☰ Todos</button><button class="tab" id="favTab">★ Favoritos</button></div>
+    <div class="heading" id="menuHeading">Menu principal</div>
+    <nav class="menu" id="menu" aria-label="Menu de páginas"><div class="empty">Validando acesso...</div></nav>
+  </aside>
+  <main class="main">
+    <div class="mainhead">
+      <div><h1>PORTAL DE CONTROLES INTERNOS</h1><p class="subtitle" id="subtitle">Central de ferramentas e informações operacionais</p></div>
+    </div>
+    
+    <div class="top-banner">
+      <div class="news-title">📢 <span id="newsText">ÚLTIMAS NOVIDADES E ATUALIZAÇÕES</span></div>
+      <div class="updates-list" id="updatesList"></div>
+      <div class="actions">
+        <button class="action" id="refreshButton">↻ Atualizar</button>
+        <button class="action" id="teamToggle" aria-expanded="false">👥 Equipe</button>
+      </div>
+    </div>
+
+    <section class="framewrap"><div class="loading" id="loading"><div class="spinner"></div><span>Carregando conteúdo...</span></div><iframe id="conteudo" title="Conteúdo do portal" src="about:blank" referrerpolicy="strict-origin-when-cross-origin"></iframe></section>
+  </main>
+  <aside class="team"><h2>👥 Equipe no Portal</h2><div class="onlinehead"><span class="dot"></span>🟢 AGORA NO PORTAL</div><div id="onlineList"></div><div class="note">A presença de outros usuários depende de um serviço de presença conectado à API.</div><div class="divider"></div><div class="recenthead">Acessos Recentes</div><div class="recent"><div class="recenticon">👤</div><div class="recentinfo"><strong id="recentName">Sessão atual</strong><small id="recentEmail">Carregando...</small><span class="tag" id="recentRole">USER</span></div></div><div class="note">O histórico real de acessos exige registro de auditoria na API.</div></aside>
+</div>
+<div class="backdrop" id="backdrop"></div><div class="toastbox" id="toastbox" aria-live="polite"></div>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const API_URL="https://script.google.com/macros/s/AKfycbxHUc58l6dqttLAGaAkPdK5IQxIAMCeOQwMlso0lmiCasjurGlammjV2rTgJTqPQStq/exec"; localStorage.setItem("apiUrl",API_URL); const S={api:"apiUrl",token:"token",nome:"nome",email:"email",perfil:"perfil",exp:"expiraEm"};
+const state={user:null,pages:[],menus:[],current:null,favorites:new Set(),favoritesOnly:false,collapsed:false,team:false,loadTimer:null};
+function go(page){location.replace(page)}
+function token(){return localStorage.getItem(S.token)}
+function clearSession(){Object.values(S).forEach(k=>localStorage.removeItem(k))}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+async function api(action,data={}){
+ const url=API_URL;
+ const controller = new AbortController();
+ const timeout = setTimeout(() => controller.abort(), 15000);
+ try {
+   const res=await fetch(url,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...data}), signal: controller.signal});
+   if(!res.ok)throw Error("Erro HTTP "+res.status+" na API.");
+   const out=await res.json();if(!out.ok)throw Error(out.error||"A solicitação falhou.");return out;
+ } finally {
+   clearTimeout(timeout);
+ }
+}
+
+function toast(message,type=""){const el=document.createElement("div");el.className="toast "+type;el.textContent=message;$("toastbox").append(el);setTimeout(()=>el.remove(),4000)}
+function initials(name){const p=String(name||"US").trim().split(/\s+/).filter(Boolean);return p.length>1?(p[0][0]+p[p.length-1][0]).toUpperCase():(p[0]||"US").slice(0,2).toUpperCase()}
+function loading(on){$("loading").classList.toggle("show",on);clearTimeout(state.loadTimer);if(on)state.loadTimer=setTimeout(()=>loading(false),15000)}
+function favKey(){return "portalFavorites:"+String(state.user?.email||"").toLowerCase()}
+function loadFav(serverFav=[]){try{const a=Array.isArray(serverFav)?serverFav:JSON.parse(localStorage.getItem(favKey())||"[]");state.favorites=new Set(Array.isArray(a)?a.map(String):[])}catch{state.favorites=new Set()}}
+function saveFav(){localStorage.setItem(favKey(),JSON.stringify([...state.favorites]));api("salvarFavoritos",{token:token(),favoritos:[...state.favorites]}).catch(e=>{console.warn(e);toast("Favoritos salvos apenas neste navegador: API indisponível.","error")})}
+function renderUser(){
+ const u=state.user;
+ $("avatar").textContent=initials(u.nome||u.email);
+ const adminBtn=$("profileAdmin"); if(adminBtn) adminBtn.hidden = u.perfil!=="admin";
+ $("recentName").textContent=u.nome||u.email;
+ $("recentEmail").textContent=u.email;
+ $("recentRole").textContent=u.perfil.toUpperCase();
+ $("onlineList").innerHTML="";
+ const member=document.createElement("div");member.className="member";
+ member.innerHTML='<div class="avatar">'+initials(u.nome||u.email)+'</div><div class="memberinfo"><strong></strong><small>Você · Sessão atual</small></div><span class="dot"></span>';
+ member.querySelector("strong").textContent=u.nome||u.email;
+ $("onlineList").append(member);
+}
+function normalize(p){const val=(a,b,d="")=>p[a]??p[b]??d;return{id:String(val("id","ID")),nome:String(val("nome","Nome","Página")),arquivo:String(val("arquivo","Arquivo")),url:String(val("url","URL")),icone:String(val("icone","Icone","📄")),ordem:Number(val("ordem","Ordem",0)),menu:String(val("menu","Menu","Menu principal")||"Menu principal"),submenu:String(val("submenu","Submenu","")||""),descricao:String(val("descricao","Descricao","")||""),podeVer:val("podeVer","podeVer",false)===true||String(val("podeVer","podeVer",false)).toLowerCase()==="true",podeEditar:val("podeEditar","podeEditar",false)===true||String(val("podeEditar","podeEditar",false)).toLowerCase()==="true"}}
+function visiblePages(){return state.pages.filter(p=>p.podeVer&&(!state.favoritesOnly||state.favorites.has(p.id)))}
+function renderMenu(){
+ $("allTab").classList.toggle("active",!state.favoritesOnly);$("favTab").classList.toggle("active",state.favoritesOnly);$("menuHeading").textContent=state.favoritesOnly?"Favoritos":"Menu principal";
+ const menu=$("menu");menu.replaceChildren();const list=visiblePages();
+ if(!list.length){const e=document.createElement("div");e.className="empty";e.textContent=state.favoritesOnly?"Você ainda não adicionou favoritos.":"Nenhuma página autorizada para seu perfil.";menu.append(e);return}
+ 
+ const addPage=(p,container)=>{
+   const wrap=document.createElement("div");wrap.className="itemwrap";
+   const b=document.createElement("button");b.className="item"+(state.current?.id===p.id?" active":"");b.type="button";b.title=p.descricao||p.nome;
+   const ico=document.createElement("span");ico.className="ico";ico.textContent=p.icone||"📄";
+   const label=document.createElement("span");label.className="label";label.textContent=p.nome;
+   b.append(ico,label);
+   b.addEventListener("click",()=>{openPage(p);closeMobile()});
+   const star=document.createElement("button");star.type="button";star.className="fav-star"+(state.favorites.has(p.id)?" selected":"");star.textContent=state.favorites.has(p.id)?"★":"☆";star.title=state.favorites.has(p.id)?"Remover dos favoritos":"Adicionar aos favoritos";star.setAttribute("aria-label",star.title);star.addEventListener("click",e=>{e.stopPropagation();toggleFav(p.id)});
+   wrap.append(b,star);container.append(wrap);
+ };
+
+ if(state.favoritesOnly){list.forEach(p=>addPage(p,menu));return}
+ 
+ const groups=new Map();
+ state.menus.forEach(m => groups.set(m.nome, { ...m, items: [] }));
+ 
+ list.forEach(p=>{
+   const g=(p.menu||"Menu principal").trim()||"Menu principal";
+   if(!groups.has(g)) groups.set(g, { id: g, nome: g, ordem: 999, icone: "▦", items: [] });
+   groups.get(g).items.push(p);
+ });
+ 
+ const sortedGroups = Array.from(groups.values()).sort((a,b) => a.ordem - b.ordem);
+ 
+ sortedGroups.forEach(groupData=>{
+   if(groupData.items.length === 0) return;
+   
+   const name = groupData.nome;
+   const group=document.createElement("div");group.className="menu-group";
+   const trigger=document.createElement("button");trigger.className="group-trigger";trigger.type="button";
+   trigger.innerHTML=`<span>${groupData.icone||"▦"}</span><span class="label"></span><span class="group-arrow">›</span>`;
+   trigger.querySelector(".label").textContent=name;
+   const fly=document.createElement("div");fly.className="submenu-flyout";
+   
+   groupData.items.sort((a,b)=>a.ordem-b.ordem).forEach(p=>addPage(p,fly));
+   
+   group.addEventListener("mouseenter", () => {
+     if (matchMedia("(max-width:820px)").matches) return;
+     const rect = trigger.getBoundingClientRect();
+     fly.style.display = "block";
+     fly.style.position = "fixed";
+     fly.style.left = rect.right + "px";
+     let top = rect.top;
+     if (top + fly.offsetHeight > window.innerHeight) {
+       top = window.innerHeight - fly.offsetHeight - 10;
+     }
+     fly.style.top = top + "px";
+   });
+   group.addEventListener("mouseleave", () => { fly.style.display = "none"; });
+   trigger.addEventListener("click", (e) => {
+     if (matchMedia("(max-width:820px)").matches) {
+       e.preventDefault();
+       const isBlock = fly.style.display === "block";
+       document.querySelectorAll(".submenu-flyout").forEach(f => f.style.display = "none");
+       fly.style.display = isBlock ? "none" : "block";
+     }
+   });
+
+   group.append(trigger,fly);
+   menu.append(group);
+ });
+}
+async function renderUpdates(){
+ const box=$("updatesList");
+ if(!box) return;
+ box.replaceChildren();
+ try {
+   const res = await api("listarHistorico", { token: token() });
+   const items = res.data || [];
+   if(!items.length){
+     const e=document.createElement("span");e.className="update-empty";e.textContent="Nenhuma novidade recente.";box.append(e);
+     return;
+   }
+   items.forEach(r=>{
+     const c=document.createElement("article");c.className="update-card";
+     const title=document.createElement("strong");title.textContent=r.acao;
+     const desc=document.createElement("small");desc.textContent=r.detalhe + " (" + new Date(r.data).toLocaleDateString('pt-BR') + ")";
+     c.append(title,desc);box.append(c);
+   });
+ } catch(e) {
+   const el = document.createElement("span"); el.className="update-empty"; el.textContent="Erro ao carregar atualizações."; box.append(el);
+ }
+}
+function slug(v){return String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"").trim()}
+function pageUrl(p){
+  const raw = (p.url || "").trim() || (p.arquivo || "").trim();
+  if(!raw) throw Error("A página não tem arquivo ou URL configurado.");
+  const u=new URL(raw,location.href);
+  if(!["http:","https:"].includes(u.protocol)) throw Error("Protocolo de URL não permitido.");
+  return u;
+}
+function openPage(p){
+ if(!p||!p.podeVer){toast("Você não tem permissão para visualizar esta página.","error");return}
+ try{
+  const u=pageUrl(p);u.searchParams.set("modo",p.podeEditar?"editar":"ver");
+  if(token())u.searchParams.set("token",token());
+  state.current=p;
+  const routeName=(p.arquivo||p.id||"").split("/").pop();
+  const routeUrl=new URL(location.href);routeUrl.searchParams.set("pagina",routeName);history.replaceState({pagina:routeName},"",routeUrl.href);
+  $("subtitle").textContent=p.nome+" · "+(p.podeEditar?"Modo de edição":"Somente leitura");
+  $("conteudo").removeAttribute("srcdoc");loading(true);$("conteudo").src=u.href;renderMenu();
+ }catch(e){toast(e.message,"error")}
+}
+async function welcome(){
+  let home={};
+  try {
+    const r = await api("obterConfiguracoes", { token: token() });
+    if (r.data && r.data.home) home = JSON.parse(r.data.home);
+  } catch(e) { 
+    console.warn("Erro ao carregar configs da API:", e);
+    try{home=JSON.parse(localStorage.getItem("portalHomeSettings")||"{}")}catch(err){}
+  }
+
+  const defaultBlocks = [
+    { icon: "📋", title: "Ferramentas operacionais", text: "Acesse os sistemas e controles pelo menu lateral." },
+    { icon: "🔐", title: "Acesso controlado", text: "As páginas disponíveis dependem das permissões atribuídas ao usuário." },
+    { icon: "⭐", title: "Favoritos", text: "Use a opção Favoritos para localizar páginas rapidamente." }
+  ];
+  const blocks = home.blocks && home.blocks.length ? home.blocks : defaultBlocks;
+  const blocksHtml = blocks.map(b => `<article class="card"><div class="icon">${esc(b.icon||"📄")}</div><h2>${esc(b.title||"")}</h2><p>${esc(b.text||"")}</p></article>`).join('');
+
+  state.current=null;$("subtitle").textContent="Central de ferramentas e informações operacionais";loading(false);
+  $("conteudo").removeAttribute("src");
+  $("conteudo").srcdoc=`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;padding:clamp(18px,4vw,38px);font-family:system-ui;background:#fff;color:#333}.hero{padding:clamp(20px,4vw,36px);background:#fffbea;border:1px solid #f2e9a7;border-radius:14px}.eyebrow{font-size:11px;font-weight:800;letter-spacing:1px;color:#2D3277}h1{font-size:clamp(23px,4vw,34px);margin:13px 0;color:#2D3277}p{font-size:14px;line-height:1.8;color:#666;max-width:650px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:15px;margin-top:24px}.card{padding:20px;border:1px solid #e8e8e8;border-radius:12px}.icon{font-size:25px}h2{font-size:15px;margin:12px 0 8px}.card p{font-size:12px}.footer{margin-top:26px;font-size:11px;color:#999}</style><body><section class="hero"><div class="eyebrow">PORTAL DE CONTROLES INTERNOS</div><h1>${(home.title||"Bem-vindo ao Portal").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</h1><p>${(home.intro||"Um ambiente centralizado para acessar ferramentas, consultar informações e realizar atividades conforme as permissões do seu perfil.").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</p></section><section class="grid">${blocksHtml}</section><div class="footer">Portal interno · Utilize os recursos de acordo com as permissões concedidas.</div></body></html>`;
+  renderMenu();
+  if(home.news){ $("newsText").textContent = home.news; }
+}
+async function loadData(){
+  const [rPages, rMenus] = await Promise.all([
+    api("listarPaginas",{token:token()}),
+    api("listarMenus",{token:token()})
+  ]);
+  loadFav(rPages.favoritos||[]);
+  state.menus = rMenus.data || [];
+  state.pages = (Array.isArray(rPages.data)?rPages.data:[]).map(normalize).filter(p=>p.podeVer).sort((a,b)=>a.ordem-b.ordem);
+  renderMenu();renderUpdates();
+  if(!state.pages.length){await welcome();return}
+ 
+  const params=new URLSearchParams(location.search);
+  const requested=params.get("portal")||params.get("pagina")||params.get("");
+ 
+  if(requested){
+   let target;
+   if (requested === "admin.html" && state.user?.perfil === "admin") {
+       target = { id:'admin', nome:'Painel Administrativo', arquivo:'admin.html', podeVer:true, podeEditar:true, icone:'⚙' };
+   } else {
+       target=state.pages.find(p=>p.arquivo===requested||p.arquivo.split("/").pop()===requested||p.id===requested||slug(p.nome)===slug(requested));
+   }
+   if(target){requestAnimationFrame(()=>openPage(target));return}
+ }
+ await welcome();
+}
+async function validate(){
+ if(!token()){go("login.html");return false}
+ const exp=localStorage.getItem(S.exp);
+ if(exp){const t=new Date(exp).getTime();if(Number.isFinite(t)&&t<=Date.now()){toast("Sessão expirada. Redirecionando para o login…","error");clearSession();setTimeout(()=>go("login.html"),1200);return false}}
+ let lastError=null;
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const r=await api("validarToken",{token:token()});const d=r.data||r;
+   state.user={nome:d.nome||localStorage.getItem(S.nome)||"",email:d.email||localStorage.getItem(S.email)||"",perfil:String(d.perfil||localStorage.getItem(S.perfil)||"user").toLowerCase()};
+   Object.entries({nome:state.user.nome,email:state.user.email,perfil:state.user.perfil}).forEach(([k,v])=>localStorage.setItem(S[k],v));
+   renderUser();return true;
+  }catch(e){lastError=e;if(attempt===0)await new Promise(resolve=>setTimeout(resolve,700));}
+ }
+ console.error("Falha ao validar sessão:",lastError);
+ toast("Não foi possível validar sua sessão. Redirecionando…","error");
+ clearSession();setTimeout(()=>go("login.html"),1200);return false;
+}
+async function logout(){ $("logoutButton").disabled=true;try{if(token())await api("logout",{token:token()})}catch(e){console.warn(e)}finally{clearSession();go("login.html")}}
+function toggleFav(id){if(state.favorites.has(id)){state.favorites.delete(id);toast("Removido dos favoritos.")}else{state.favorites.add(id);toast("Adicionado aos favoritos.","success")}saveFav();renderMenu()}
+function closeMobile(){$("sidebar").classList.remove("mobile-open");$("backdrop").classList.remove("visible")}
+function toggleMenu(){if(matchMedia("(max-width:820px)").matches){const open=$("sidebar").classList.toggle("mobile-open");$("backdrop").classList.toggle("visible",open)}else{$("layout").classList.toggle("collapsed")}}
+async function init(){
+ localStorage.setItem(S.api,API_URL);if(!token()){go("login.html");return}
+ try{if(await validate())await loadData()}catch(e){console.error(e);$("menu").innerHTML='<div class="empty">Não foi possível carregar as páginas. Verifique a API e tente atualizar.</div>';await welcome();toast(e.message||"Erro ao carregar o portal.","error")}
+}
+$("menuToggle").addEventListener("click",toggleMenu);$("backdrop").addEventListener("click",closeMobile);
+$("allTab").addEventListener("click",()=>{state.favoritesOnly=false;renderMenu()});$("favTab").addEventListener("click",()=>{state.favoritesOnly=true;renderMenu()});
+$("profileAdmin").addEventListener("click",()=>{
+  if(state.user?.perfil!=="admin"){toast("Acesso restrito ao administrador.","error");return}
+  const adminPage = { id:'admin', nome:'Painel Administrativo', arquivo:'admin.html', podeVer:true, podeEditar:true, icone:'⚙' };
+  openPage(adminPage);
+});
+$("userButton").addEventListener("click",e=>{if(e.target.closest("button")&&e.target.id==="logoutButton")return;const open=$("userMenu").classList.toggle("open");$("userButton").setAttribute("aria-expanded",String(open))});document.addEventListener("click",e=>{if(!$("userButton").contains(e.target)){$("userMenu").classList.remove("open");$("userButton").setAttribute("aria-expanded","false")}});$("logoutButton").addEventListener("click",e=>{e.stopPropagation();logout()});$("refreshButton").addEventListener("click",()=>state.current?openPage(state.current):init());
+$("teamToggle").addEventListener("click",()=>{const open=$("layout").classList.toggle("team-open");$("teamToggle").setAttribute("aria-expanded",String(open))});
+$("conteudo").addEventListener("load",()=>loading(false));
+
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeMobile();if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="b"&&!["INPUT","TEXTAREA"].includes(document.activeElement?.tagName)){e.preventDefault();toggleMenu()}});
+window.PortalInterno=Object.freeze({recarregar:init,abrirPagina:id=>{const p=state.pages.find(x=>x.id===String(id));if(p)openPage(p)},alternarFavorito:id=>toggleFav(String(id))});
+init();
+</script></body></html>

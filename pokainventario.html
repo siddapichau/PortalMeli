@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Poka Inventário — Painel</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<style>
+  :root { --azul:#2D3277; --amarelo:#FFD700; --fundo:#f4f6f9; }
+  body { background: var(--fundo); font-family: system-ui,-apple-system,sans-serif; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  #loader-overlay {
+    position: fixed; inset: 0; background: rgba(255,255,255,.9);
+    display: none; flex-direction: column; align-items: center;
+    justify-content: center; z-index: 9999;
+  }
+  #loader-overlay.show { display: flex; }
+  .spinner {
+    width: 48px; height: 48px; border: 5px solid #e5e7eb;
+    border-top-color: var(--azul); border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .card-menu {
+    background: #fff; border-radius: 12px; padding: 26px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06); cursor: pointer;
+    transition: transform .2s; border: 1px solid #e5e7eb;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .card-menu:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,.1); border-color: var(--azul); }
+
+  .kpi-card { background: #fff; border-radius: 8px; padding: 14px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.1); border-left: 4px solid var(--amarelo); }
+  .kpi-title { font-size: 11px; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 4px; letter-spacing: .04em; }
+  .kpi-value { font-size: 24px; font-weight: 900; color: #111; line-height: 1; }
+
+  .table-container { max-height: 420px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: center; border-bottom: 1px solid #eee; }
+  th { background: #f8f9fa; position: sticky; top: 0; color: #555; z-index: 2;
+       font-weight: bold; text-transform: uppercase; font-size: 11px; }
+  td { color: #333; }
+  tr:hover td { background: #fafafa; }
+
+  .bg-yellow-header { background-color: #FFF159; color: #333; }
+
+  body.exporting-mode #capture-area {
+    position: absolute !important; top: 0; left: 0;
+    width: 1200px !important; height: auto !important;
+    padding: 20px !important; background: #f4f6f9 !important; z-index: 99999;
+  }
+  body.exporting-mode .no-export { display: none !important; }
+  body.exporting-mode .table-container { max-height: none !important; overflow: visible !important; }
+</style>
+</head>
+<body class="p-4 min-w-[900px]">
+
+<div id="loader-overlay" class="no-export">
+  <div class="spinner"></div>
+  <p class="mt-4 font-bold text-[#2D3277]">Processando…</p>
+</div>
+
+<!-- TOPBAR -->
+<header class="bg-white rounded-lg shadow p-3 flex justify-between items-center mb-6 border-t-4 border-[#FFD700] no-export">
+  <div class="flex items-center gap-3">
+    <button onclick="abrirTela('screen-menu')" class="text-[#2D3277] font-bold text-lg hover:opacity-80">
+      <i class="fa-solid fa-house mr-1"></i> Início
+    </button>
+    <span class="text-gray-300">|</span>
+    <a href="https://docs.google.com/spreadsheets/d/17bLyx_TthoMMXq7r6lifiW3d-mR4k8C2KO_Lqf9VzEc/edit"
+       target="_blank" class="text-sm text-blue-700 hover:underline">
+      <i class="fa-solid fa-table"></i> Planilha
+    </a>
+    <button onclick="location.reload()" class="text-sm text-blue-700 hover:underline">
+      <i class="fa-solid fa-rotate-right"></i> Atualizar
+    </button>
+  </div>
+  <div class="flex items-center gap-2">
+    <button onclick="compartilharWhatsApp()" class="bg-[#25D366] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+      <i class="fa-brands fa-whatsapp"></i> Copiar p/ WhatsApp
+    </button>
+    <button onclick="baixarImagem()" class="bg-[#2D3277] text-white text-sm px-3 py-1.5 rounded hover:opacity-90">
+      <i class="fa-solid fa-camera"></i> Exportar Imagem
+    </button>
+  </div>
+</header>
+
+<!-- MENU -->
+<div id="screen-menu" class="screen active no-export">
+  <h2 class="text-2xl font-bold text-[#2D3277] mb-6">Qual período deseja analisar?</h2>
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-7xl">
+
+    <div class="card-menu text-center border-t-4 border-[#2D3277]" onclick="abrirDashboard('daily')">
+      <div class="text-4xl text-[#2D3277] mb-3"><i class="fa-solid fa-calendar-day"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Diário</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha o <b>dia</b>.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#FFD700]" onclick="abrirDashboard('weekly')">
+      <div class="text-4xl text-[#FFD700] mb-3"><i class="fa-solid fa-calendar-week"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Semanal</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha a <b>semana (xxw)</b>.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#34a853]" onclick="abrirDashboard('monthly')">
+      <div class="text-4xl text-[#34a853] mb-3"><i class="fa-solid fa-calendar-days"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Dashboard Mensal</h3>
+      <p class="text-sm text-gray-500 mt-2">Escolha o <b>mês</b>.</p>
+    </div>
+
+    <div class="card-menu text-center border-t-4 border-[#ea4335]" onclick="abrirTela('screen-upload')">
+      <div class="text-4xl text-[#ea4335] mb-3"><i class="fa-solid fa-upload"></i></div>
+      <h3 class="text-lg font-bold text-[#2D3277]">Subir CSV</h3>
+      <p class="text-sm text-gray-500 mt-2">Envie o arquivo <b>Poka Inventário</b>.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- UPLOAD -->
+<div id="screen-upload" class="screen">
+  <div class="bg-white rounded-lg shadow p-6 max-w-2xl mx-auto border-t-4 border-[#ea4335]">
+    <h2 class="text-2xl font-bold text-[#2D3277] mb-4"><i class="fa-solid fa-upload mr-2"></i>Enviar CSV Poka Inventário</h2>
+    <p class="text-sm text-gray-600 mb-4">Selecione o arquivo CSV e informe a data de referência (data do inventário).</p>
+
+    <label class="block mb-4">
+      <span class="text-xs font-bold text-gray-600 uppercase">Data de Referência</span>
+      <input type="date" id="input-data" class="mt-1 w-full border rounded px-3 py-2 text-sm font-bold text-gray-700">
+    </label>
+
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition cursor-pointer"
+         onclick="document.getElementById('file-input').click()">
+      <i class="fa-solid fa-cloud-arrow-up text-4xl text-gray-400 mb-2"></i>
+      <p class="text-gray-600 font-bold mb-1">Clique para selecionar o CSV</p>
+      <p class="text-xs text-gray-400">Aceito: .csv ou .txt</p>
+      <input type="file" id="file-input" accept=".csv,.txt" class="hidden" onchange="mostrarArquivo()">
+    </div>
+
+    <div id="arquivo-selecionado" class="mt-4 text-sm text-gray-700"></div>
+
+    <button onclick="enviarArquivo()" class="mt-6 w-full bg-[#ea4335] text-white font-bold py-3 rounded hover:opacity-90 transition">
+      <i class="fa-solid fa-cloud-arrow-up mr-2"></i> Enviar CSV
+    </button>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="screen-dashboard" class="screen">
+  <div id="capture-area">
+
+    <div class="bg-white rounded-lg shadow p-4 mb-4 text-center border-t-4 border-[#FFD700]">
+      <h2 class="text-2xl font-black text-[#2D3277] uppercase tracking-wider" id="dash-title">POKA INVENTÁRIO</h2>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="bg-white rounded-lg shadow p-3 mb-4 flex flex-wrap items-center gap-3 no-export">
+      <span class="text-xs font-black text-gray-500 uppercase tracking-wider mr-1">Filtros:</span>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600" id="filter-periodo-label">Data:</span>
+        <select id="filter-periodo" onchange="aplicarFiltros()" class="border rounded px-3 py-1.5 text-sm font-bold text-gray-700"></select>
+      </label>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600">Situação:</span>
+        <select id="filter-situacao" onchange="aplicarFiltros()" class="border rounded px-3 py-1.5 text-sm font-bold text-gray-700">
+          <option value="TODOS">Todas</option>
+          <option value="Deslocado">Deslocado</option>
+          <option value="Verificados">Verificados</option>
+        </select>
+      </label>
+
+      <label class="flex items-center gap-1">
+        <span class="text-xs font-bold text-gray-600">Área:</span>
+        <select id="filter-area" onchange="aplicarFiltros()" class="border rounded px-3 py-1.5 text-sm font-bold text-gray-700"></select>
+      </label>
+
+      <button onclick="resetarFiltros()" class="ml-auto bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded">
+        <i class="fa-solid fa-eraser mr-1"></i> Limpar
+      </button>
+    </div>
+
+    <!-- KPIs PRINCIPAIS -->
+    <div class="grid grid-cols-4 gap-3 mb-3">
+      <div class="kpi-card text-center" style="border-left-color:#2D3277;">
+        <div class="kpi-title">Pacotes Únicos</div>
+        <div class="kpi-value" id="kpi-total">0</div>
+      </div>
+      <div class="kpi-card text-center" style="border-left-color:#34a853;">
+        <div class="kpi-title">Verificados</div>
+        <div class="kpi-value text-green-600" id="kpi-verif">0</div>
+      </div>
+      <div class="kpi-card text-center" style="border-left-color:#ea4335;">
+        <div class="kpi-title">Deslocados</div>
+        <div class="kpi-value text-red-600" id="kpi-desl">0</div>
+      </div>
+      <div class="kpi-card text-center" style="border-left-color:#FFD700;">
+        <div class="kpi-title">Taxa Deslocamento</div>
+        <div class="kpi-value" id="kpi-taxa">0.00%</div>
+      </div>
+    </div>
+
+    <!-- KPIs SECUNDÁRIOS -->
+    <div class="grid grid-cols-3 gap-3 mb-4">
+      <div class="bg-white rounded-lg shadow p-3 text-center">
+        <h3 class="text-xs text-gray-500 font-bold uppercase mb-1">Total de Scans</h3>
+        <p class="text-xl font-black text-blue-600" id="kpi-scans">0</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-3 text-center">
+        <h3 class="text-xs text-gray-500 font-bold uppercase mb-1">Operadores Ativos</h3>
+        <p class="text-xl font-black text-blue-600" id="kpi-ops">0</p>
+      </div>
+      <div class="bg-white rounded-lg shadow p-3 text-center">
+        <h3 class="text-xs text-gray-500 font-bold uppercase mb-1">Áreas Envolvidas</h3>
+        <p class="text-xl font-black text-blue-600" id="kpi-areas">0</p>
+      </div>
+    </div>
+
+    <!-- GRÁFICOS -->
+    <div class="grid grid-cols-12 gap-4 mb-4">
+      <div class="col-span-4 bg-white rounded-lg shadow">
+        <div class="bg-yellow-header p-2 text-center border-b border-gray-300 rounded-t-lg">
+          <h3 class="text-[13px] font-bold text-gray-800">✅ VERIFICADOS POR ÁREA</h3>
+        </div>
+        <div id="chart-areas" class="p-2"></div>
+      </div>
+
+      <div class="col-span-4 bg-white rounded-lg shadow">
+        <div class="bg-yellow-header p-2 text-center border-b border-gray-300 rounded-t-lg">
+          <h3 class="text-[13px] font-bold text-gray-800">✅ TOP 10 OPERADORES</h3>
+        </div>
+        <div id="chart-ops" class="p-2"></div>
+      </div>
+
+      <div class="col-span-4 bg-white rounded-lg shadow">
+        <div class="bg-yellow-header p-2 text-center border-b border-gray-300 rounded-t-lg">
+          <h3 class="text-[13px] font-bold text-gray-800">📈 EVOLUÇÃO TAXA (%)</h3>
+        </div>
+        <div id="chart-evol" class="p-2"></div>
+      </div>
+    </div>
+
+    <!-- TABELAS -->
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <div class="bg-white rounded-lg shadow flex flex-col">
+        <div class="bg-yellow-header p-2 border-b border-gray-300 rounded-t-lg">
+          <h3 class="text-[13px] font-bold text-gray-800">≡ DETALHAMENTO POR ÁREA</h3>
+        </div>
+        <div class="table-container" style="max-height:340px">
+          <table id="table-areas">
+            <thead><tr><th class="text-left">Área</th><th>Total</th><th>Verif.</th><th>Desl.</th><th>Repres. (%)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow flex flex-col">
+        <div class="bg-yellow-header p-2 border-b border-gray-300 rounded-t-lg">
+          <h3 class="text-[13px] font-bold text-gray-800">≡ DETALHAMENTO POR OPERADOR</h3>
+        </div>
+        <div class="table-container" style="max-height:340px">
+          <table id="table-ops">
+            <thead><tr><th class="text-left">Operador</th><th>Total</th><th>Verif.</th><th>Desl.</th><th>Repres. (%)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LISTA DE DESLOCADOS -->
+    <div class="bg-white rounded-lg shadow flex flex-col">
+      <div class="bg-yellow-header p-2 border-b border-gray-300 rounded-t-lg flex justify-between px-4 items-center">
+        <h3 class="text-[13px] font-bold text-gray-800">⚠️ PACOTES DESLOCADOS</h3>
+        <span class="text-xs font-bold text-gray-700" id="badge-deslocados">0</span>
+      </div>
+      <div class="table-container" style="max-height:450px">
+        <table id="table-deslocados">
+          <thead>
+            <tr>
+              <th class="text-left">Pacote</th>
+              <th>Área</th>
+              <th>Operador</th>
+              <th>Data Ref.</th>
+              <th>Scan</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* =====================================================
+   CONFIG
+   ===================================================== */
+const API_URL = "https://script.google.com/macros/s/AKfycbzbDqejGTc-j7eU4bfGNnMBLukF8ASHsGdQJm25PP3CUX_0cnqqh3FG7jmJY5qvRQFdjA/exec";
+
+let globalData = [];
+let analytics  = null;
+let currentMode = 'daily';
+let chartAreas = null, chartOps = null, chartEvol = null;
+
+/* =====================================================
+   INFRA & DATAS
+   ===================================================== */
+function abrirTela(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function fmtNum(v) { return Number(v).toLocaleString('pt-BR'); }
+function esc(v)    { return String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+function fmtPct(v) { return Number(v).toFixed(2) + '%'; }
+
+async function callAPI(action, payload = {}) {
+  const loader = document.getElementById('loader-overlay');
+  loader.classList.add('show');
+  try {
+    const res  = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, payload })
+    });
+    const data = await res.json();
+    if (data && data.erro) throw new Error(data.erro);
+    return data;
+  } catch (err) {
+    Swal.fire({ icon:'error', title:'Erro', text: err.message, confirmButtonColor:'#2D3277' });
+    throw err;
+  } finally {
+    loader.classList.remove('show');
+  }
+}
+
+function parseDataBR(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  if (s.includes('T') && s.includes('-')) {
+    const p = s.split('T')[0].split('-'); 
+    return new Date(+p[0], +p[1]-1, +p[2]);
+  }
+  const p = s.split('/');
+  if (p.length !== 3) return null;
+  return new Date(+p[2], +p[1]-1, +p[0]);
+}
+
+function formatDateBR(d) {
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+// Nova função para converter AM/PM para 24h
+function formatTime24h(scanStr) {
+  if (!scanStr) return '-';
+  return String(scanStr).replace(/(\d{1,2}):(\d{2})\s*(am|pm)/i, (match, p1, p2, p3) => {
+    let h = parseInt(p1);
+    const ap = p3.toLowerCase();
+    if (ap === 'pm' && h !== 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+    return String(h).padStart(2, '0') + ':' + p2;
+  });
+}
+
+function getISOYearWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const isoYear = d.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return { isoYear, week };
+}
+function weekKey(date) {
+  const { isoYear, week } = getISOYearWeek(date);
+  return `${isoYear}-W${String(week).padStart(2,'0')}`;
+}
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+}
+
+/* =====================================================
+   ANÁLISE
+   ===================================================== */
+function computeAnalytics(rows) {
+  const byPacote = {};
+
+  rows.forEach(r => {
+    const pacote = String(r['Pacote'] || '').trim();
+    if (!pacote) return;
+
+    const yearHint = parseDataBR(r['Data_Ref'])?.getFullYear() || new Date().getFullYear();
+    const ts = parseScanTimestamp(r['Data_Scan'], yearHint);
+
+    if (!byPacote[pacote]) {
+      byPacote[pacote] = { pacote, latest: null, latestTs: -Infinity, all: [] };
+    }
+    byPacote[pacote].all.push(r);
+
+    if (ts && ts.getTime() > byPacote[pacote].latestTs) {
+      byPacote[pacote].latestTs = ts.getTime();
+      byPacote[pacote].latest   = r;
+    }
+  });
+
+  Object.values(byPacote).forEach(g => {
+    if (!g.latest) g.latest = g.all[g.all.length - 1];
+  });
+
+  let verificados = 0, deslocados = 0;
+  const byArea = {}, byOperador = {};
+
+  Object.values(byPacote).forEach(g => {
+    const sit = String(g.latest['Situacao'] || '').trim();
+    const isDesl = sit === 'Deslocado';
+    const isVer  = sit === 'Verificados';
+
+    if (isDesl) deslocados++;
+    else if (isVer) verificados++;
+
+    const area = (String(g.latest['Area'] || '').trim()) || '(Sem Área)';
+    const op   = (String(g.latest['Operador'] || '').trim()) || '(Sem Operador)';
+
+    if (!byArea[area])   byArea[area]   = { total:0, deslocados:0, verificados:0 };
+    if (!byOperador[op]) byOperador[op] = { total:0, deslocados:0, verificados:0 };
+
+    byArea[area].total++;
+    byOperador[op].total++;
+
+    if (isDesl)     { byArea[area].deslocados++; byOperador[op].deslocados++; }
+    else if (isVer) { byArea[area].verificados++; byOperador[op].verificados++; }
+  });
+
+  const total = Object.keys(byPacote).length;
+  return {
+    total, verificados, deslocados,
+    totalScans: rows.length,
+    taxa: total > 0 ? (deslocados / total) * 100 : 0,
+    byArea, byOperador, byPacote
+  };
+}
+
+/* =====================================================
+   CARREGAR DADOS & NAVEGAÇÃO
+   ===================================================== */
+async function garantirDados() {
+  if (globalData.length > 0) return;
+  const resp = await callAPI('getHistorico');
+  globalData = resp.rows || [];
+}
+
+async function abrirDashboard(mode) {
+  currentMode = mode;
+  abrirTela('screen-dashboard');
+  
+  try { await garantirDados(); }
+  catch(e) {
+    document.querySelector('#table-deslocados tbody').innerHTML =
+      `<tr><td colspan="5" style="color:#b91c1c;font-weight:700;padding:20px">${esc(e.message)}</td></tr>`;
+    return;
+  }
+  popularFiltroArea();
+  popularFiltroPeriodo();
+}
+
+function popularFiltroPeriodo() {
+  const sel = document.getElementById('filter-periodo');
+  const lbl = document.getElementById('filter-periodo-label');
+  const set = new Set();
+
+  globalData.forEach(r => {
+    const d = parseDataBR(r['Data_Ref']);
+    if (d) {
+      if (currentMode === 'daily') set.add(formatDateBR(d));
+      else if (currentMode === 'weekly') set.add(weekKey(d));
+      else set.add(monthKey(d));
+    }
+  });
+
+  if (currentMode === 'daily') {
+    lbl.innerText = 'Data:';
+    const arr = Array.from(set).sort((a,b) => {
+      const pa = a.split('/'), pb = b.split('/');
+      return new Date(`${pb[2]}-${pb[1]}-${pb[0]}`) - new Date(`${pa[2]}-${pa[1]}-${pa[0]}`);
+    });
+    sel.innerHTML = arr.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
+    const hoje = formatDateBR(new Date());
+    sel.value = arr.includes(hoje) ? hoje : (arr[0] || '');
+  } 
+  else if (currentMode === 'weekly') {
+    lbl.innerText = 'Semana:';
+    const arr = Array.from(set).sort().reverse();
+    sel.innerHTML = arr.map(k => {
+      const [y, w] = k.split('-W');
+      return `<option value="${esc(k)}">${parseInt(w)}w - ${esc(y)}</option>`;
+    }).join('');
+    const curKey = weekKey(new Date());
+    sel.value = arr.includes(curKey) ? curKey : (arr[0] || '');
+  } 
+  else {
+    lbl.innerText = 'Mês:';
+    const arr = Array.from(set).sort().reverse();
+    const nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    sel.innerHTML = arr.map(k => {
+      const [y, m] = k.split('-');
+      return `<option value="${esc(k)}">${nomes[+m-1]}/${esc(y)}</option>`;
+    }).join('');
+    const curKey = monthKey(new Date());
+    sel.value = arr.includes(curKey) ? curKey : (arr[0] || '');
+  }
+  aplicarFiltros();
+}
+
+function popularFiltroArea() {
+  const sel = document.getElementById('filter-area');
+  const set = new Set();
+  globalData.forEach(r => set.add(String(r['Area']||'').trim() || '(Sem Área)'));
+  const arr = Array.from(set).sort();
+  sel.innerHTML = '<option value="TODOS">Todas</option>' + arr.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+}
+
+function resetarFiltros() {
+  document.getElementById('filter-situacao').value = 'TODOS';
+  document.getElementById('filter-area').value = 'TODOS';
+  const sel = document.getElementById('filter-periodo');
+  if (sel.options.length) sel.selectedIndex = 0;
+  aplicarFiltros();
+}
+
+/* =====================================================
+   FILTRO / RENDER
+   ===================================================== */
+function aplicarFiltros() {
+  const vPer = document.getElementById('filter-periodo').value;
+  const vSit = document.getElementById('filter-situacao').value;
+  const vArea = document.getElementById('filter-area').value;
+
+  let base = globalData.filter(r => {
+    const d = parseDataBR(r['Data_Ref']);
+    if (!d) return false;
+
+    let okPer = false;
+    if (currentMode === 'daily') okPer = formatDateBR(d) === vPer;
+    else if (currentMode === 'weekly') okPer = weekKey(d) === vPer;
+    else okPer = monthKey(d) === vPer;
+
+    if (!okPer) return false;
+    if (vArea !== 'TODOS' && ((String(r['Area']||'').trim()) || '(Sem Área)') !== vArea) return false;
+    return true;
+  });
+
+  analytics = computeAnalytics(base);
+
+  if (vSit !== 'TODOS') {
+    const alvo = vSit.toLowerCase();
+    Object.keys(analytics.byPacote).forEach(p => {
+      const sit = String(analytics.byPacote[p].latest['Situacao']||'').toLowerCase();
+      if (sit !== alvo) delete analytics.byPacote[p];
+    });
+    let verif = 0, desl = 0;
+    Object.values(analytics.byPacote).forEach(g => {
+      const sit = String(g.latest['Situacao']||'').trim();
+      if (sit === 'Deslocado') desl++;
+      else if (sit === 'Verificados') verif++;
+    });
+    analytics.verificados = verif;
+    analytics.deslocados = desl;
+    analytics.total = Object.keys(analytics.byPacote).length;
+    analytics.taxa = analytics.total > 0 ? (desl / analytics.total) * 100 : 0;
+  }
+
+  const titulos = { daily:'DIÁRIO', weekly:'SEMANAL', monthly:'MENSAL' };
+  const sel = document.getElementById('filter-periodo');
+  const selectedPeriodLabel = sel.options[sel.selectedIndex]?.text || vPer;
+  document.getElementById('dash-title').innerText = `POKA INVENTÁRIO ${titulos[currentMode]} — ${selectedPeriodLabel}`;
+
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const a = analytics;
+
+  document.getElementById('kpi-total').innerText = fmtNum(a.total);
+  document.getElementById('kpi-verif').innerText = fmtNum(a.verificados);
+  document.getElementById('kpi-desl').innerText  = fmtNum(a.deslocados);
+  document.getElementById('kpi-taxa').innerText  = fmtPct(a.taxa);
+  document.getElementById('kpi-scans').innerText = fmtNum(a.totalScans);
+  document.getElementById('kpi-ops').innerText   = fmtNum(Object.keys(a.byOperador).length);
+  document.getElementById('kpi-areas').innerText = fmtNum(Object.keys(a.byArea).length);
+  document.getElementById('badge-deslocados').innerText = fmtNum(a.deslocados) + ' pacote(s)';
+
+  renderTables();
+  renderCharts();
+}
+
+function renderTables() {
+  const a = analytics;
+  const totalGeral = a.total; 
+
+  // Áreas
+  const areas = Object.entries(a.byArea).map(([k,v]) => ({ name:k, ...v }));
+  areas.sort((x,y) => y.verificados - x.verificados || y.total - x.total);
+  document.querySelector('#table-areas tbody').innerHTML = areas.map(r => {
+    const taxaRep = totalGeral > 0 ? (r.total / totalGeral * 100) : 0;
+    return `<tr>
+      <td class="text-left font-bold text-gray-700">${esc(r.name)}</td>
+      <td class="font-bold">${fmtNum(r.total)}</td>
+      <td class="text-green-700 font-bold">${fmtNum(r.verificados)}</td>
+      <td class="text-red-600">${fmtNum(r.deslocados)}</td>
+      <td class="text-gray-500 font-bold">${fmtPct(taxaRep)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="text-gray-400 py-4">Sem dados</td></tr>';
+
+  // Operadores
+  const ops = Object.entries(a.byOperador).map(([k,v]) => ({ name:k, ...v }));
+  ops.sort((x,y) => y.verificados - x.verificados || y.total - x.total);
+  document.querySelector('#table-ops tbody').innerHTML = ops.map(r => {
+    const taxaRep = totalGeral > 0 ? (r.total / totalGeral * 100) : 0;
+    return `<tr>
+      <td class="text-left font-bold text-gray-700 capitalize">${esc(r.name)}</td>
+      <td class="font-bold">${fmtNum(r.total)}</td>
+      <td class="text-green-700 font-bold">${fmtNum(r.verificados)}</td>
+      <td class="text-red-600">${fmtNum(r.deslocados)}</td>
+      <td class="text-gray-500 font-bold">${fmtPct(taxaRep)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="text-gray-400 py-4">Sem dados</td></tr>';
+
+  // Deslocados
+  const desl = Object.values(a.byPacote)
+    .filter(g => String(g.latest['Situacao']||'').trim() === 'Deslocado')
+    .sort((x,y) => (y.latest['Data_Ref']||'').localeCompare(x.latest['Data_Ref']||''));
+    
+  document.querySelector('#table-deslocados tbody').innerHTML = desl.map(g => {
+    // Aqui aplicamos a formatação de 24h no Data_Scan
+    const scanFormatado = formatTime24h(g.latest['Data_Scan']);
+    return `<tr>
+      <td class="text-left font-bold text-gray-800">${esc(g.pacote)}</td>
+      <td class="text-gray-700">${esc(g.latest['Area']||'-')}</td>
+      <td class="text-gray-700 capitalize">${esc(g.latest['Operador']||'-')}</td>
+      <td class="text-gray-600">${esc(formatDateBR(parseDataBR(g.latest['Data_Ref'])))}</td>
+      <td class="text-gray-600">${esc(scanFormatado)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="text-gray-400 py-4">Nenhum pacote deslocado 🎉</td></tr>';
+}
+
+function renderCharts() {
+  const a = analytics;
+
+  const areas = Object.entries(a.byArea).map(([k,v]) => ({ name:k, ...v }))
+    .sort((x,y) => y.verificados - x.verificados).slice(0, 8);
+  const optsAreas = {
+    chart: { type:'bar', height:260, toolbar:{ show:false } },
+    series: [{ name:'Verificados', data: areas.map(r => r.verificados) }],
+    xaxis: { categories: areas.map(r => r.name) },
+    colors: ['#34a853'], 
+    plotOptions: { bar: { horizontal:true, borderRadius:4 } },
+    dataLabels: { enabled:true, style:{ fontSize:'11px' } }
+  };
+  if (!chartAreas) { chartAreas = new ApexCharts(document.querySelector('#chart-areas'), optsAreas); chartAreas.render(); }
+  else chartAreas.updateOptions(optsAreas);
+
+  const ops = Object.entries(a.byOperador).map(([k,v]) => ({ name:k, ...v }))
+    .sort((x,y) => y.verificados - x.verificados).slice(0, 10);
+  const optsOps = {
+    chart: { type:'bar', height:260, toolbar:{ show:false } },
+    series: [{ name:'Verificados', data: ops.map(r => r.verificados) }],
+    xaxis: { categories: ops.map(r => r.name.split(' ')[0] + ' ' + (r.name.split(' ')[1]||'')) },
+    colors: ['#2D3277'], 
+    plotOptions: { bar: { horizontal:true, borderRadius:4 } },
+    dataLabels: { enabled:true, style:{ fontSize:'11px' } }
+  };
+  if (!chartOps) { chartOps = new ApexCharts(document.querySelector('#chart-ops'), optsOps); chartOps.render(); }
+  else chartOps.updateOptions(optsOps);
+
+  const evoMap = {};
+  globalData.forEach(r => {
+    const d = parseDataBR(r['Data_Ref']);
+    if (!d) return;
+    const pac = String(r['Pacote']||'').trim();
+    if (!pac) return;
+    const k = formatDateBR(d);
+    if (!evoMap[k]) evoMap[k] = {};
+    
+    const ts = parseScanTimestamp(r['Data_Scan'], d.getFullYear());
+    if (!evoMap[k][pac]) evoMap[k][pac] = { latest:null, ts:-Infinity };
+    if (ts && ts.getTime() > evoMap[k][pac].ts) {
+      evoMap[k][pac].ts = ts.getTime();
+      evoMap[k][pac].latest = r;
+    }
+  });
+  
+  const evoKeys = Object.keys(evoMap).sort((a,b) => {
+    const pa = a.split('/'), pb = b.split('/');
+    return new Date(`${pa[2]}-${pa[1]}-${pa[0]}`) - new Date(`${pb[2]}-${pb[1]}-${pb[0]}`);
+  });
+  
+  const evoLabels = [], evoVals = [];
+  evoKeys.forEach(k => {
+    let d = 0, t = 0;
+    Object.values(evoMap[k]).forEach(g => {
+      t++;
+      if (g.latest && String(g.latest['Situacao']||'').trim() === 'Deslocado') d++;
+    });
+    evoLabels.push(k);
+    evoVals.push(t > 0 ? +(d/t*100).toFixed(2) : 0);
+  });
+
+  const optsEvol = {
+    chart: { type:'line', height:260, toolbar:{ show:false } },
+    series: [{ name:'Taxa Deslocamento %', data: evoVals }],
+    xaxis: { categories: evoLabels },
+    colors: ['#FFD700'],
+    stroke: { curve:'smooth', width:3 },
+    markers: { size:5 },
+    dataLabels: { enabled:true, formatter: v => v.toFixed(1) + '%', style:{ fontSize:'10px' } }
+  };
+  if (!chartEvol) { chartEvol = new ApexCharts(document.querySelector('#chart-evol'), optsEvol); chartEvol.render(); }
+  else chartEvol.updateOptions(optsEvol);
+}
+
+/* =====================================================
+   WHATSAPP (Copiar Texto)
+   ===================================================== */
+function compartilharWhatsApp() {
+  if (!analytics || !analytics.total) return Swal.fire('Aviso', 'Sem dados para compartilhar.', 'warning');
+  
+  const a = analytics;
+  const titulo = document.getElementById('dash-title').innerText;
+  
+  let msg = `*${titulo}*\n\n`;
+  msg += `📦 Pacotes Únicos: *${fmtNum(a.total)}*\n`;
+  msg += `✅ Verificados: *${fmtNum(a.verificados)}*\n`;
+  msg += `⚠️ Deslocados: *${fmtNum(a.deslocados)}*\n`;
+  msg += `📉 Taxa Deslocamento: *${fmtPct(a.taxa)}*\n`;
+
+  navigator.clipboard.writeText(msg).then(() => {
+    Swal.fire({
+      icon: 'success',
+      title: 'Texto Copiado!',
+      text: 'Os dados foram copiados. Basta abrir o WhatsApp e colar.',
+      confirmButtonColor: '#2D3277',
+      timer: 2500,
+      showConfirmButton: false
+    });
+  }).catch(() => {
+    Swal.fire('Erro', 'Não foi possível copiar automaticamente. Seu navegador bloqueou.', 'error');
+  });
+}
+
+/* =====================================================
+   UPLOAD
+   ===================================================== */
+function parseScanTimestamp(scanStr, yearHint) {
+  if (!scanStr) return null;
+  const m = String(scanStr).match(/(\d{1,2}):(\d{2})\s*(am|pm)\s*\|\s*(\d{1,2})\/(\w+)/i);
+  if (!m) return null;
+  let h = parseInt(m[1]);
+  const ap = m[3].toLowerCase();
+  if (ap === 'pm' && h !== 12) h += 12;
+  if (ap === 'am' && h === 12) h = 0;
+  const day = parseInt(m[4]);
+  const monthMap = { jan:0, fev:1, mar:2, abr:3, mai:4, jun:5, jul:6, ago:7, set:8, out:9, nov:10, dez:11 };
+  const month = monthMap[m[5].toLowerCase().substring(0,3)];
+  if (month === undefined) return null;
+  return new Date(yearHint, month, day, h, parseInt(m[2]));
+}
+
+function mostrarArquivo() {
+  const f = document.getElementById('file-input').files[0];
+  const div = document.getElementById('arquivo-selecionado');
+  div.innerHTML = f
+    ? `<div><i class="fa-solid fa-file-csv text-green-600 mr-2"></i><b>${esc(f.name)}</b> <span class="text-xs bg-gray-200 px-2 py-0.5 rounded ml-2">${(f.size/1024).toFixed(1)} KB</span></div>`
+    : '';
+}
+
+async function enviarArquivo() {
+  const file = document.getElementById('file-input').files[0];
+  const dataInput = document.getElementById('input-data').value;
+  if (!file) return Swal.fire('Atenção', 'Selecione o arquivo CSV.', 'warning');
+  if (!dataInput) return Swal.fire('Atenção', 'Informe a data de referência.', 'warning');
+
+  const [y, m, d] = dataInput.split('-');
+  const dataRef = `${d}/${m}/${y}`;
+
+  const loader = document.getElementById('loader-overlay');
+  loader.classList.add('show');
+
+  try {
+    const text = await file.text();
+    const resp = await callAPI('uploadCSV', { data: dataRef, csv: text });
+
+    await Swal.fire({
+      icon:'success', title:'Sucesso!',
+      text:`${resp.inseridos} registros inseridos em ${dataRef}.`, confirmButtonColor:'#2D3277'
+    });
+
+    document.getElementById('file-input').value = '';
+    document.getElementById('arquivo-selecionado').innerHTML = '';
+    globalData = []; analytics = null;
+    abrirTela('screen-menu');
+  } catch (err) {
+    Swal.fire({ icon:'error', title:'Erro', text: err.message, confirmButtonColor:'#2D3277' });
+  } finally {
+    loader.classList.remove('show');
+  }
+}
+
+/* =====================================================
+   EXPORT IMAGEM
+   ===================================================== */
+function baixarImagem() {
+  if (!analytics || !analytics.total) {
+    return Swal.fire('Aviso', 'Sem dados para exportar.', 'warning');
+  }
+  document.getElementById('loader-overlay').classList.add('show');
+  document.body.classList.add('exporting-mode');
+
+  setTimeout(() => {
+    html2canvas(document.getElementById('capture-area'), { scale:2, useCORS:true })
+      .then(canvas => {
+        const a = document.createElement('a');
+        a.href = canvas.toDataURL('image/png');
+        const fname = `PokaInventario_${currentMode}_${(document.getElementById('filter-periodo').value||'geral').replace(/[^\w-]/g,'_')}.png`;
+        a.download = fname;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        document.body.classList.remove('exporting-mode');
+        document.getElementById('loader-overlay').classList.remove('show');
+      })
+      .catch(() => {
+        document.body.classList.remove('exporting-mode');
+        document.getElementById('loader-overlay').classList.remove('show');
+        Swal.fire('Erro','Falha ao gerar imagem.','error');
+      });
+  }, 400);
+}
+
+/* =====================================================
+   INIT
+   ===================================================== */
+window.addEventListener('DOMContentLoaded', () => {
+  const hoje = new Date();
+  const iso = hoje.toISOString().split('T')[0];
+  document.getElementById('input-data').value = iso;
+});
+</script>
+</body>
+</html>

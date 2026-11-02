@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buscador & Dashboard - Salvados DS</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    * { text-rendering: geometricPrecision; -webkit-font-smoothing: antialiased; box-sizing: border-box; }
+    body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; background-color: #f3f4f6; font-family: 'Inter', sans-serif; overflow: hidden; display: flex; flex-direction: column; }
+    .ml-yellow { background-color: #FFF159; }
+    .card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+    .table-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 250px; }
+    .table-scroll { flex: 1; overflow-y: auto; overflow-x: auto; width: 100%; display: block; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { position: sticky; top: 0; z-index: 10; background-color: #f8fafc; border-bottom: 2px solid #e5e7eb; font-size: 11px; text-transform: uppercase; color: #6b7280; padding: 12px; text-align: left; }
+    td { padding: 12px; font-size: 11px; border-bottom: 1px solid #f3f4f6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    tr:hover td { background-color: #e8f0fe !important; transition: background-color 0.2s; }
+
+    @keyframes driveGhostTruck { 0% { left: -10%; } 100% { left: 110%; } }
+    #ghost-truck-overlay {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(3px);
+      z-index: 99999; display: none; flex-direction: column; justify-content: center; align-items: center;
+    }
+    .ghost-truck-container { position: absolute; animation: driveGhostTruck 4s linear infinite; display: flex; flex-direction: column; align-items: center; }
+    .ghost-truck-icon { font-size: 90px; color: #2D3277; }
+    .ghost-truck-text { font-size: 20px; font-weight: 900; color: #2D3277; margin-top: 10px; text-transform: uppercase; letter-spacing: 2px;}
+
+    body.exporting-mode #capture-zone {
+      width: 1920px !important; height: 1080px !important; max-width: 1920px !important; max-height: 1080px !important;
+      padding: 40px !important; background-color: #f3f4f6 !important; position: absolute !important; top: 0 !important; left: 0 !important; z-index: 9999 !important; display: flex !important; flex-direction: column;
+    }
+    body.exporting-mode .no-export { display: none !important; }
+    body.exporting-mode .table-scroll { overflow-y: hidden !important; max-height: 450px !important; }
+    body.exporting-mode .table-scroll::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+
+  <div id="ghost-truck-overlay">
+    <div class="ghost-truck-container">
+      <i class="fas fa-truck-fast ghost-truck-icon"></i>
+      <span class="ghost-truck-text" id="ghost-text">Processando...</span>
+    </div>
+  </div>
+
+  <nav class="ml-yellow px-6 py-3 flex justify-between items-center shadow-md shrink-0 z-50">
+    <div class="flex items-center gap-4">
+      <img src="https://upload.wikimedia.org/wikipedia/pt/0/04/Logotipo_MercadoLivre.png" alt="ML" class="h-8">
+      <h1 class="text-xl font-black uppercase text-gray-900 tracking-tight">Sistema Global DS</h1>
+      <span id="badge-turno" class="bg-[#2D3277] text-white text-xs font-bold px-3 py-1 rounded-full hidden shadow-sm"></span>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="alternarTela('search')" class="bg-white hover:bg-gray-50 text-[#2D3277] font-black py-2 px-5 rounded-lg shadow-sm border border-gray-200 transition flex items-center gap-2"><i class="fas fa-search"></i> Recuperar</button>
+      <button onclick="prepararDashboard()" class="bg-[#2D3277] hover:bg-blue-900 text-white font-black py-2 px-5 rounded-lg shadow-sm transition flex items-center gap-2"><i class="fas fa-chart-pie"></i> Dashboard</button>
+    </div>
+  </nav>
+
+  <main id="view-search" class="flex-1 flex flex-col p-4 md:p-6 gap-4 overflow-hidden hidden">
+    <div class="card flex gap-4 shrink-0 shadow-sm border-l-4 border-blue-500 p-4">
+      <div class="relative w-full">
+        <i class="fas fa-barcode absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xl"></i>
+        <input type="text" id="search-input" class="w-full bg-gray-50 border-2 border-gray-200 rounded-lg pl-12 pr-6 py-3 text-lg font-bold focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition" placeholder="Bipar ID, Descrição ou Valor..." oninput="executarSmartSearch()">
+      </div>
+    </div>
+
+    <div class="flex-1 flex flex-col gap-4 overflow-hidden">
+      <div id="container-vazio" class="card flex-1 flex flex-col items-center justify-center text-gray-400">
+        <i class="fas fa-boxes-stacked text-6xl mb-4 text-gray-300"></i>
+        <h2 class="text-xl font-black text-gray-500">Aguardando Leitura...</h2>
+        <p class="font-bold text-sm">Digite no campo acima para cruzar dados com a malha.</p>
+      </div>
+
+      <div id="container-resultados" class="hidden flex-1 flex flex-col gap-4 min-h-0">
+        <div class="flex-1 flex flex-col min-h-0 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+          <div class="bg-green-50 border-b border-green-100 p-2 px-4"><h3 id="titulo-exatos" class="text-green-700 font-black text-xs uppercase"><i class="fas fa-crosshairs mr-1"></i> Exatos (0)</h3></div>
+          <div class="overflow-auto flex-1"><table class="w-full"><tbody id="tbody-exatos"></tbody></table></div>
+        </div>
+        <div class="flex-1 flex flex-col min-h-0 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+          <div class="bg-amber-50 border-b border-amber-100 p-2 px-4"><h3 id="titulo-aproximados" class="text-amber-700 font-black text-xs uppercase"><i class="fas fa-lightbulb mr-1"></i> Aproximados (0)</h3></div>
+          <div class="overflow-auto flex-1"><table class="w-full"><tbody id="tbody-aproximados"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <main id="view-dashboard" class="flex-1 flex flex-col items-center p-4 md:p-6 overflow-hidden hidden w-full">
+    <div id="capture-zone" class="flex flex-col flex-1 w-full max-w-[1800px] gap-4">
+
+      <div class="bg-gradient-to-r from-[#2D3277] to-gray-800 text-white rounded-xl p-4 px-6 flex justify-between items-center shadow-sm border-b-4 border-[#FFD700] shrink-0">
+        <div class="flex items-center gap-4">
+          <span class="text-3xl drop-shadow">📊</span>
+          <div>
+            <h1 class="text-xl font-black uppercase tracking-wide">Performance de Recuperação</h1>
+            <p class="text-[#FFD700] font-bold text-xs">Turno Ativo: <span id="dash-turno-title">Aguardando...</span></p>
+          </div>
+        </div>
+        <button onclick="prepararDashboard(true)" class="no-export bg-[#FFD700] text-gray-900 px-5 py-2 rounded-lg font-black text-xs hover:bg-yellow-400 transition shadow flex items-center gap-2">
+          <i class="fas fa-sync-alt"></i> Atualizar Dados
+        </button>
+      </div>
+
+      <div class="no-export flex justify-between items-center bg-white p-3 px-6 rounded-xl shadow-sm border border-gray-200 shrink-0">
+        <div class="flex gap-6">
+          <div class="flex flex-col">
+            <label class="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Data do Reporte</label>
+            <select id="filter-data" onchange="aplicarFiltrosDash()" class="border border-gray-300 p-1.5 rounded text-xs w-48 bg-gray-50 font-bold outline-none focus:border-[#2D3277]"></select>
+          </div>
+        </div>
+        <div class="flex gap-4">
+          <button onclick="gerarWPP()" class="bg-[#2ecc71] text-white font-black px-4 py-2 rounded hover:bg-[#27ae60] shadow-sm transition flex items-center gap-2 text-xs"><i class="fab fa-whatsapp text-sm"></i> Copiar WPP</button>
+          <button onclick="exportarDashboard()" class="bg-[#2D3277] text-white font-black px-4 py-2 rounded hover:bg-blue-900 shadow-sm transition flex items-center gap-2 text-xs"><i class="fas fa-camera text-sm"></i> Exportar Dash HD</button>
+        </div>
+      </div>
+
+      <div id="metrics" class="grid grid-cols-4 gap-4 shrink-0">
+        <div class="card border-l-4 border-[#FFD700] flex flex-col justify-center py-4 px-5">
+          <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Pacotes Recuperados</h3>
+          <p id="kpi-vol" class="text-3xl font-black text-gray-800 mt-2">0</p>
+          <div><span class="text-yellow-700 text-[10px] font-bold bg-yellow-50 px-2 py-0.5 rounded mt-2 inline-block">Volume Físico</span></div>
+        </div>
+        <div class="card border-l-4 border-[#10b981] flex flex-col justify-center py-4 px-5">
+          <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Valor Total (USD)</h3>
+          <p id="kpi-usd" class="text-3xl font-black text-[#10b981] mt-2">$ 0.00</p>
+          <div><span class="text-gray-500 text-[10px] font-bold bg-gray-100 px-2 py-0.5 rounded mt-2 inline-block" id="kpi-brl">R$ 0,00</span></div>
+        </div>
+        <div class="card border-l-4 border-[#3b82f6] flex flex-col justify-center py-4 px-5">
+          <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Ticket Médio (USD)</h3>
+          <p id="kpi-tkt-usd" class="text-3xl font-black text-[#3b82f6] mt-2">$ 0.00</p>
+          <div><span class="text-gray-500 text-[10px] font-bold bg-gray-100 px-2 py-0.5 rounded mt-2 inline-block" id="kpi-tkt-brl">R$ 0,00</span></div>
+        </div>
+        <div class="card border-l-4 border-purple-500 flex flex-col justify-center py-4 px-5">
+          <h3 class="text-[11px] text-gray-400 font-black uppercase tracking-wide">Ciclo Dominante</h3>
+          <p id="kpi-ciclo" class="text-3xl font-black text-purple-600 mt-2">-</p>
+          <div><span class="text-purple-600 text-[10px] font-bold bg-purple-50 px-2 py-0.5 rounded mt-2 inline-block">Maior ofensor</span></div>
+        </div>
+      </div>
+
+      <div id="charts" class="grid grid-cols-2 gap-4 shrink-0">
+        <div class="card flex flex-col p-4">
+          <h3 class="text-[#2c3e50] font-black text-[12px] mb-3 uppercase text-center tracking-wide">Top 5 Pacotes Mais Caros (USD)</h3>
+          <div style="position: relative; height: 180px; width: 100%;"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="card flex flex-col p-4">
+          <h3 class="text-[#2c3e50] font-black text-[12px] mb-3 uppercase text-center tracking-wide">Distribuição por Ciclo (USD)</h3>
+          <div style="position: relative; height: 180px; width: 100%; display: flex; justify-content: center;"><canvas id="donutChart"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card p-0 border border-gray-200 overflow-hidden flex flex-col table-container">
+        <div class="bg-[#f8fafc] p-3 px-6 border-b border-gray-200 shrink-0">
+          <h3 class="text-[#2c3e50] font-black text-sm uppercase tracking-wider"><i class="fas fa-list-ul mr-2"></i> Listagem Operacional de Recuperados</h3>
+        </div>
+        <div class="table-scroll p-0 m-0">
+          <table class="w-full">
+            <thead>
+              <tr>
+                <th style="width: 20%; padding-left: 24px;">ID / Origem</th>
+                <th style="width: 15%;">Ciclo Orig.</th>
+                <th style="width: 35%;">Descrição do Produto</th>
+                <th style="width: 15%;">Data Recuperado</th>
+                <th style="width: 15%; text-align: right; padding-right: 24px;">Valor (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="table-dash-body" style="background-color: #ffffff;">
+              <tr><td colspan="5" class="text-center p-8 text-gray-400 font-bold">Aguardando processamento...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ==========================================
+    // ⚙️ CONFIGURAÇÃO
+    // ==========================================
+    const API_URL = 'https://script.google.com/macros/s/AKfycbzVYANA0UnJFSWBgHF4rrUs_FVEMH38uwhHM-bTyvYFyEBEHv2DiC6bmgxkl7LwuUNU/exec';
+
+    const TTL_SEARCH_MS = 3 * 60 * 1000;
+    const TTL_DASH_MS   = 2 * 60 * 1000;
+    const KEY_SEARCH    = 'DS_SEARCH_V2';
+    const KEY_DASH_PRE  = 'DS_DASH_V2_';
+
+    let TURNO_USUARIO = null;
+    let BANCO_GLOBAL  = [];
+    let DADOS_DASH_RAW = [];
+    let DADOS_FILTRADOS = [];
+    let TAXA_USD = 5.50;
+    let DATA_CACHE_DASH = null;
+    let barChartInst, donutChartInst;
+
+    const STOPWORDS = ['de','para','com','o','a','os','as','em','um','uma','uns','umas','no','na','nos','nas'];
+    const formatBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+    const formatUSD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+    const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timerProgressBar: true });
+
+    // ==========================================
+    // 📡 FETCH BLINDADO
+    // ==========================================
+    async function chamarAPI(action, payload = {}) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+      try {
+        const resp = await fetch(API_URL, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: action, payload: payload }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!resp.ok) throw new Error("O Google retornou HTTP " + resp.status);
+
+        const text = await resp.text();
+        try {
+          const data = JSON.parse(text);
+          if (data.erro) throw new Error(data.erro);
+          return data;
+        } catch (jsonErr) {
+          throw new Error("Erro ao ler dados do servidor. Resposta não foi JSON.");
+        }
+      } catch (e) {
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+          throw new Error('A requisição expirou (Timeout). O Google demorou mais de 45s para responder.');
+        }
+        throw e;
+      }
+    }
+
+    // ==========================================
+    // 🚀 BOOTSTRAP (NÃO BLOQUEANTE)
+    // ==========================================
+    window.onload = () => {
+      try { Chart.register(ChartDataLabels); } catch (e) {}
+
+      fetch('https://economia.awesomeapi.com.br/last/USD-BRL',
+            { signal: (AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined) })
+        .then(r => r.json())
+        .then(dt => { if (dt.USDBRL && dt.USDBRL.ask) TAXA_USD = parseFloat(dt.USDBRL.ask); })
+        .catch(() => {});
+
+      Swal.fire({
+        title: 'Controle de Turno', html: 'Identifique seu turno para iniciar a malha.', icon: 'info',
+        input: 'select', inputOptions: { 'AM1': 'Turno AM1', 'AM2': 'Turno AM2', 'PM': 'Turno PM', 'SD': 'Turno SD' },
+        inputPlaceholder: 'Selecione...', allowOutsideClick: false, confirmButtonColor: '#2D3277',
+        inputValidator: (value) => { if (!value) return 'É obrigatório escolher um turno!' }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          TURNO_USUARIO = result.value;
+          document.getElementById('badge-turno').innerText = `TURNO: ${TURNO_USUARIO}`;
+          document.getElementById('badge-turno').classList.remove('hidden');
+          document.getElementById('dash-turno-title').innerText = TURNO_USUARIO;
+          alternarTela('search');
+          carregarBancoBusca();
+        }
+      });
+    };
+
+    function alternarTela(tela) {
+      document.getElementById('view-search').classList.add('hidden');
+      document.getElementById('view-dashboard').classList.add('hidden');
+      document.getElementById(`view-${tela}`).classList.remove('hidden');
+      document.getElementById(`view-${tela}`).classList.add('flex');
+    }
+
+    // ==========================================
+    // 🔍 ENGINE DE BUSCA
+    // ==========================================
+    async function carregarBancoBusca(force = false) {
+      if (!force) {
+        try {
+          const raw = localStorage.getItem(KEY_SEARCH);
+          if (raw) {
+            const c = JSON.parse(raw);
+            if (c.ts && (Date.now() - c.ts < TTL_SEARCH_MS) && Array.isArray(c.data)) {
+              BANCO_GLOBAL = c.data;
+              return;
+            }
+          }
+        } catch (e) {}
+      }
+
+      mostrarCaminhao("Sincronizando Malha...");
+      try {
+        const res = await chamarAPI("buscarDadosDS");
+        if (!res.success) throw new Error(res.erro);
+        BANCO_GLOBAL = res.data;
+        try { localStorage.setItem(KEY_SEARCH, JSON.stringify({ ts: Date.now(), data: res.data })); } catch (e) {}
+        esconderCaminhao();
+      } catch (e) {
+        esconderCaminhao();
+        Swal.fire('Erro', e.message, 'error');
+      }
+    }
+
+    function normalizar(str) {
+      return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function parseMonetario(valStr) {
+      let l = String(valStr).replace(/[R$\s]/gi, '').trim(); if (!l) return 0;
+      if (l.indexOf('.') > -1 && l.indexOf(',') > -1) l = l.replace(/\./g, '').replace(',', '.');
+      else if (l.indexOf(',') > -1) l = l.replace(',', '.');
+      return parseFloat(l) || 0;
+    }
+
+    function executarSmartSearch() {
+      const q = document.getElementById('search-input').value;
+      const cV = document.getElementById('container-vazio'), cR = document.getElementById('container-resultados');
+      if (!q || q.trim().length < 2) { cV.classList.remove('hidden'); cR.classList.add('hidden'); return; }
+
+      const qN = normalizar(q);
+      const tokens = qN.split(/\s+/).filter(w => !STOPWORDS.includes(w) && w.length > 1);
+      let ex = [], ap = [];
+
+      BANCO_GLOBAL.forEach(item => {
+        const iN = normalizar(item.id), dN = normalizar(item.descricao), vN = normalizar(item.valor);
+        if (iN === qN || iN.includes(qN) || dN.includes(qN) || vN.includes(qN)) { ex.push(item); return; }
+        if (tokens.length > 0) {
+          let m = 0; tokens.forEach(t => { if (dN.includes(t)) m++; });
+          if (m > 0 && m >= Math.ceil(tokens.length / 2)) ap.push({ ...item, score: m });
+        }
+      });
+      ap.sort((a,b) => b.score - a.score);
+
+      cV.classList.add('hidden'); cR.classList.remove('hidden');
+      document.getElementById('titulo-exatos').innerHTML = `<i class="fas fa-crosshairs mr-1"></i> Exatos (${ex.length})`;
+      document.getElementById('titulo-aproximados').innerHTML = `<i class="fas fa-lightbulb mr-1"></i> Aproximados (${ap.length})`;
+      document.getElementById('tbody-exatos').innerHTML = gerarTrBusca(ex.slice(0, 50));
+      document.getElementById('tbody-aproximados').innerHTML = gerarTrBusca(ap.slice(0, 50));
+    }
+
+    function gerarTrBusca(lista) {
+      if (!lista.length) {
+        return `<tr><td colspan="4" class="text-center p-6 text-gray-400 font-bold">Nenhum cruzamento.</td></tr>`;
+      }
+      return lista.map(i => {
+        const vF = parseMonetario(i.valor);
+        const idEsc = encodeURIComponent(i.id);
+        const urlPkg = `https://envios.adminml.com/logistics/package-management/package/${idEsc}`;
+        const urlBO  = `https://shipping-bo.adminml.com/sauron/shipments/shipment/${idEsc}`;
+
+        return `<tr>
+          <td class="w-1/4">
+            <div class="flex flex-col">
+              <span class="font-mono font-bold text-gray-900">${i.id}</span>
+              <span class="text-[10px] text-blue-600 font-bold bg-blue-50 w-max px-2 rounded mt-1">${i.ciclo || 'N/A'}</span>
+            </div>
+          </td>
+          <td class="w-2/4 text-gray-700 font-semibold truncate max-w-xs" title="${i.descricao}">${i.descricao}</td>
+          <td class="w-1/4">
+            <span class="text-green-600 font-black block">${formatUSD.format(vF / TAXA_USD)}</span>
+            <span class="text-gray-400 text-[10px] font-bold">${formatBRL.format(vF)}</span>
+          </td>
+          <td class="w-auto text-right">
+            <div class="flex items-center justify-end gap-1.5">
+              <a href="${urlPkg}" target="_blank" rel="noopener noreferrer"
+                 title="Gestão de Pacote (envios.adminml)"
+                 class="bg-blue-600 hover:bg-blue-700 text-white w-8 h-8 rounded flex items-center justify-center shadow-sm transition">
+                <i class="fas fa-dolly text-xs"></i>
+              </a>
+              <a href="${urlBO}" target="_blank" rel="noopener noreferrer"
+                 title="BackOffice (shipping-bo.adminml)"
+                 class="bg-purple-600 hover:bg-purple-700 text-white w-8 h-8 rounded flex items-center justify-center shadow-sm transition">
+                <i class="fas fa-clipboard-list text-xs"></i>
+              </a>
+              <button onclick="gravarItem('${i.id}')"
+                      class="bg-[#2D3277] hover:bg-blue-900 text-white font-black py-1.5 px-4 rounded shadow-sm text-xs transition">
+                Recuperar
+              </button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function gravarItem(id) {
+      const item = BANCO_GLOBAL.find(i => i.id === id);
+      if (!item) return;
+      item.turnoUsuario = TURNO_USUARIO;
+
+      mostrarCaminhao("Gravando...");
+      try {
+        const res = await chamarAPI("salvarItem", item);
+        if (!res.success) throw new Error(res.erro);
+
+        BANCO_GLOBAL = BANCO_GLOBAL.filter(i => i.id !== id);
+
+        try {
+          const c = JSON.parse(localStorage.getItem(KEY_SEARCH) || 'null');
+          if (c && Array.isArray(c.data)) {
+            c.data = c.data.filter(i => i.id !== id);
+            c.ts = Date.now();
+            localStorage.setItem(KEY_SEARCH, JSON.stringify(c));
+          }
+        } catch (e) {}
+
+        DATA_CACHE_DASH = null;
+        try { localStorage.removeItem(KEY_DASH_PRE + TURNO_USUARIO); } catch (e) {}
+
+        document.getElementById('search-input').value = '';
+        executarSmartSearch();
+        esconderCaminhao();
+        Toast.fire({ icon: 'success', title: `Pacote ${id} Recuperado!`, timer: 2000 });
+      } catch (e) {
+        esconderCaminhao();
+        Swal.fire('Erro', e.message, 'error');
+      }
+    }
+
+    // ==========================================
+    // 📊 ENGINE DO DASHBOARD
+    // ==========================================
+    async function prepararDashboard(forceRefresh = false) {
+      alternarTela('dashboard');
+
+      if (!forceRefresh && DATA_CACHE_DASH) {
+        rebuildDateFilter(DATA_CACHE_DASH);
+        renderizarDashImediato(DATA_CACHE_DASH);
+        return;
+      }
+
+      if (!forceRefresh) {
+        try {
+          const raw = localStorage.getItem(KEY_DASH_PRE + TURNO_USUARIO);
+          if (raw) {
+            const c = JSON.parse(raw);
+            if (c.ts && (Date.now() - c.ts < TTL_DASH_MS) && Array.isArray(c.data)) {
+              DATA_CACHE_DASH = c.data;
+              rebuildDateFilter(c.data);
+              renderizarDashImediato(c.data);
+              return;
+            }
+          }
+        } catch (e) {}
+      }
+
+      mostrarCaminhao("Calculando Dashboard...");
+      try {
+        const res = await chamarAPI("getDashboard", { turnoUsuario: TURNO_USUARIO });
+        if (!res.success) throw new Error(res.erro);
+
+        DATA_CACHE_DASH = res.dados;
+        try { localStorage.setItem(KEY_DASH_PRE + TURNO_USUARIO, JSON.stringify({ ts: Date.now(), data: res.dados })); } catch (e) {}
+
+        rebuildDateFilter(res.dados);
+        renderizarDashImediato(res.dados);
+      } catch (e) {
+        esconderCaminhao();
+        Swal.fire('Erro no Dash', e.message, 'error');
+      }
+    }
+
+    function rebuildDateFilter(dados) {
+      const sData = document.getElementById('filter-data');
+      const dts = [...new Set(dados.map(r => r[5]))].filter(x => x && x !== "-");
+      dts.sort((a, b) => {
+        const [d1, m1, y1] = a.split('/');
+        const [d2, m2, y2] = b.split('/');
+        return new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1);
+      });
+      sData.innerHTML = dts.length
+        ? dts.map(d => `<option value="${d}">${d}</option>`).join("")
+        : `<option>Sem Registros</option>`;
+    }
+
+    function aplicarFiltrosDash() { renderizarDashImediato(DATA_CACHE_DASH || []); }
+
+    function renderizarDashImediato(dadosBrutos) {
+      esconderCaminhao();
+      const vData = document.getElementById('filter-data').value;
+      DADOS_FILTRADOS = dadosBrutos.filter(r => r[5] === vData);
+
+      const tbody = document.getElementById('table-dash-body');
+      const total = DADOS_FILTRADOS.length;
+
+      if (total === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center p-8 text-gray-500 font-bold">Nenhum dado nesta data.</td></tr>`;
+        zerarDash(); return;
+      }
+
+      let htmlAcumulado = "", somaReal = 0, freqCiclo = {};
+
+      DADOS_FILTRADOS.forEach(r => {
+        somaReal += r[3];
+        let c = String(r[1]).toUpperCase().trim();
+        freqCiclo[c] = (freqCiclo[c] || 0) + 1;
+        htmlAcumulado += `<tr>
+          <td style="padding-left:24px;"><span class="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded border border-gray-200 text-[11px]">${r[0]}</span></td>
+          <td><span class="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-full">${r[1]}</span></td>
+          <td class="text-gray-700 font-semibold" title="${r[4]}">${r[4]}</td>
+          <td class="text-gray-500 font-bold">${r[5]}</td>
+          <td class="text-right font-black text-[#111827]" style="padding-right:24px;">${formatUSD.format(r[3]/TAXA_USD)}</td>
+        </tr>`;
+      });
+
+      tbody.innerHTML = htmlAcumulado;
+
+      let sUsd = somaReal / TAXA_USD;
+      let cDom = Object.keys(freqCiclo).length > 0
+        ? Object.keys(freqCiclo).reduce((a, b) => freqCiclo[a] > freqCiclo[b] ? a : b)
+        : "-";
+
+      document.getElementById('kpi-vol').innerText = total;
+      document.getElementById('kpi-usd').innerText = formatUSD.format(sUsd);
+      document.getElementById('kpi-brl').innerText = formatBRL.format(somaReal);
+      document.getElementById('kpi-tkt-usd').innerText = formatUSD.format(sUsd/total);
+      document.getElementById('kpi-tkt-brl').innerText = formatBRL.format(somaReal/total);
+      document.getElementById('kpi-ciclo').innerText = cDom;
+
+      renderizarGraficos();
+    }
+
+    function zerarDash() {
+      document.getElementById('kpi-vol').innerText = "0";
+      document.getElementById('kpi-usd').innerText = "$ 0.00";
+      document.getElementById('kpi-brl').innerText = "R$ 0,00";
+      document.getElementById('kpi-tkt-usd').innerText = "$ 0.00";
+      document.getElementById('kpi-tkt-brl').innerText = "R$ 0,00";
+      document.getElementById('kpi-ciclo').innerText = "-";
+      if (barChartInst) barChartInst.destroy();
+      if (donutChartInst) donutChartInst.destroy();
+    }
+
+    function renderizarGraficos() {
+      const top5 = [...DADOS_FILTRADOS].sort((a,b) => b[3] - a[3]).slice(0,5);
+      const labelsTop = top5.map(x => String(x[0]).substring(0,8) + '..');
+      const dataTop = top5.map(x => x[3]/TAXA_USD);
+
+      const mapCiclo = {};
+      DADOS_FILTRADOS.forEach(r => mapCiclo[r[1]] = (mapCiclo[r[1]]||0) + (r[3]/TAXA_USD));
+      const ciclosOrd = Object.entries(mapCiclo).sort((a,b) => b[1]-a[1]).slice(0, 5);
+      const labelsCic = ciclosOrd.map(x => x[0]);
+      const dataCic = ciclosOrd.map(x => x[1]);
+
+      if (barChartInst) barChartInst.destroy();
+      if (donutChartInst) donutChartInst.destroy();
+      Chart.defaults.font.family = "'Inter', sans-serif";
+
+      barChartInst = new Chart(document.getElementById('barChart').getContext('2d'), {
+        type: 'bar',
+        data: { labels: labelsTop, datasets: [{ data: dataTop, backgroundColor: '#2D3277', borderRadius: 4 }] },
+        options: {
+          devicePixelRatio: 3, maintainAspectRatio: false, indexAxis: 'y',
+          layout: { padding: { right: 60 } },
+          plugins: { legend: { display: false }, datalabels: { color: '#333', anchor: 'end', align: 'right', font: { weight: '900', size: 10 }, formatter: v => formatUSD.format(v) } },
+          scales: { x: { display: false }, y: { grid: { display: false }, ticks: { font: { weight: 'bold', size: 10 }, color: '#4b5563' } } }
+        }
+      });
+
+      donutChartInst = new Chart(document.getElementById('donutChart').getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: labelsCic, datasets: [{ data: dataCic, backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'], borderWidth: 2 }] },
+        options: {
+          devicePixelRatio: 3, maintainAspectRatio: false, cutout: '65%', layout: { padding: 10 },
+          plugins: {
+            legend: { position: 'right', labels: { font: { weight: 'bold', size: 11 }, boxWidth: 12, color: '#4b5563' } },
+            datalabels: { color: '#fff', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, padding: 4, font: { weight: 'bold', size: 10 }, formatter: (v, ctx) => { let sum = ctx.chart._metasets[0].total; return sum > 0 ? (v * 100 / sum).toFixed(0) + '%' : ''; } }
+          }
+        }
+      });
+    }
+
+    function gerarWPP() {
+      if (!DADOS_FILTRADOS.length) return Swal.fire('Vazio', 'Sem dados gerados.', 'info');
+      const vData = document.getElementById('filter-data').value;
+      const vUsd = document.getElementById('kpi-usd').innerText;
+      const vBrl = document.getElementById('kpi-brl').innerText;
+      let msg = `*SALVADOS RECUPERADOS | TURNO ${TURNO_USUARIO}*\n🗓️ Data Base: ${vData}\n\n📦 *Volume Físico:* ${DADOS_FILTRADOS.length} pacotes\n💵 *Total (USD):* ${vUsd}\n💵 *Total (BRL):* ${vBrl}\n🎯 *Ticket Médio:* ${document.getElementById('kpi-tkt-usd').innerText}\n\n🏆 *Top 3 Ofensores Salvos:*\n`;
+      const top3 = [...DADOS_FILTRADOS].sort((a,b) => b[3]-a[3]).slice(0,3);
+      top3.forEach((t, i) => { msg += `${i+1}º ${t[0]} - ${formatUSD.format(t[3]/TAXA_USD)}\n`; });
+      navigator.clipboard.writeText(msg).then(() => Swal.fire('Copiado!', 'Cole no WhatsApp', 'success'));
+    }
+
+    function exportarDashboard() {
+      mostrarCaminhao("Gerando Imagem HD...");
+      const zone = document.getElementById('capture-zone');
+      document.body.classList.add('exporting-mode');
+      setTimeout(() => {
+        html2canvas(zone, { scale: 2, width: 1920, height: 1080, windowWidth: 1920, windowHeight: 1080, backgroundColor: '#f3f4f6', useCORS: true, logging: false })
+          .then(canvas => {
+            let link = document.createElement('a');
+            link.download = `Dash_${TURNO_USUARIO}_${document.getElementById('filter-data').value.replace(/\//g,'-')}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.click();
+            document.body.classList.remove('exporting-mode');
+            esconderCaminhao();
+          })
+          .catch(() => {
+            document.body.classList.remove('exporting-mode');
+            esconderCaminhao();
+            Swal.fire('Erro', 'Falha na captura.', 'error');
+          });
+      }, 800);
+    }
+
+    function mostrarCaminhao(txt) {
+      document.getElementById('ghost-text').innerText = txt;
+      document.getElementById('ghost-truck-overlay').style.display = 'flex';
+    }
+    function esconderCaminhao() {
+      document.getElementById('ghost-truck-overlay').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
