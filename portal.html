@@ -94,7 +94,7 @@ iframe{width:100%;height:100%;border:0;display:block;overflow-y:auto}
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
-const API_URL="https://script.google.com/macros/s/AKfycbxHUc58l6dqttLAGaAkPdK5IQxIAMCeOQwMlso0lmiCasjurGlammjV2rTgJTqPQStq/exec"; localStorage.setItem("apiUrl",API_URL); const S={api:"apiUrl",token:"token",nome:"nome",email:"email",perfil:"perfil",exp:"expiraEm"};
+const API_URL="https://script.google.com/macros/s/AKfycbxPQh9gT-5wKsMNQQzD7qupZXxMrltanLSAiC6pl95Td2bWyqxUL2UW_OE9l5LYGsB9/exec"; localStorage.setItem("apiUrl",API_URL); const S={api:"apiUrl",token:"token",nome:"nome",email:"email",perfil:"perfil",exp:"expiraEm"};
 const state={user:null,pages:[],menus:[],current:null,favorites:new Set(),favoritesOnly:false,collapsed:false,team:false,loadTimer:null};
 function go(page){location.replace(page)}
 function token(){return localStorage.getItem(S.token)}
