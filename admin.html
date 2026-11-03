@@ -140,7 +140,7 @@ main{max-width:1250px;margin:0 auto;padding:25px clamp(12px,3vw,28px)}.notice{pa
 </datalist>
 
 <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
-<script src="assets/js/n8n-api.js?v=1"></script>
+<script src="assets/js/n8n-api.js?v=3"></script>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
@@ -379,6 +379,21 @@ async function loadPermissions(){
  }catch(e){toast(e.message,"error")}
 }
 $("loadPermissions").addEventListener("click",loadPermissions);$("permissionUser").addEventListener("change",loadPermissions);
+// Editar exige ver. Marcar "editar" liga "ver" automaticamente; desmarcar "ver"
+// desliga "editar". Evita o erro do backend e deixa a regra explícita na tela.
+$("permissionsBody").addEventListener("change",event=>{
+ const alvo=event.target;
+ const linha=alvo.closest("tr");
+ if(!linha)return;
+ const ver=linha.querySelector(".canView"),editar=linha.querySelector(".canEdit");
+ if(!ver||!editar)return;
+ if(alvo.classList.contains("canEdit")&&editar.checked&&!ver.checked){
+  ver.checked=true;toast("Para editar, o usuário também precisa poder ver. \"Ver\" foi marcado.");
+ }
+ if(alvo.classList.contains("canView")&&!ver.checked&&editar.checked){
+  editar.checked=false;toast("Sem permissão de ver, a permissão de editar foi removida.");
+ }
+});
 $("savePermissions").addEventListener("click",async()=>{
  const email=$("permissionUser").value;if(!email){toast("Selecione um usuário.","error");return}
  const rows=[...$("permissionsBody").querySelectorAll("tr")];if(!rows.length){toast("Não há permissões carregadas.","error");return}

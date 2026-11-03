@@ -188,8 +188,10 @@
     </table>
   </div>
 
-  <script src="assets/js/n8n-api.js?v=1"></script>
+  <script src="assets/js/n8n-api.js?v=3" data-exigir-permissoes></script>
+  <script src="assets/js/portal-permissoes.js?v=1"></script>
   <script>
+    // A aba Paginas (coluna API) prevalece quando configurada; este valor fica como reserva.
     const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
     let dadosOriginais = [];
     let dadosFiltrados = [];
@@ -211,7 +213,8 @@
 
     async function callAPI(action, payload = {}) {
       return PortalN8N.callAPI(action, payload, async () => {
-        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+        const paginaApi = await PortalPermissoes.apiDaPagina(API_URL);
+        const res = await fetch(paginaApi, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
         return await res.json();
       });
     }
@@ -784,6 +787,7 @@
               }
 
               let isEditable = (col === COLS.turno || col === COLS.resp || col === COLS.obs || col === COLS.desc || col === COLS.valorReal);
+              if (window.PortalPermissoes && PortalPermissoes.carregado() && !PortalPermissoes.podeEditar()) isEditable = false;
               let dblAttr = isEditable ? `ondblclick="tornarEditavel(this, '${row['_idNum']}', '${col}')"` : '';
 
               html += `<td class="${isOculta} ${extraClasses}" ${styleAttr} ${dblAttr}>${innerHtml}</td>`;
@@ -816,6 +820,8 @@
 
     // --- EDIÇÃO INLINE COM BOTÃO POR LINHA ---
     function tornarEditavel(td, id, col) {
+        try { PortalPermissoes.exigirEdicao(); }
+        catch (erro) { Swal.fire({ icon: 'warning', title: 'Somente leitura', text: erro.message }); return; }
         if (td.querySelector('input') || td.querySelector('select')) return; 
         
         const row = dadosOriginais.find(r => r['_idNum'] === id);

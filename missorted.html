@@ -230,8 +230,10 @@
     </div>
   </div>
 
-  <script src="assets/js/n8n-api.js?v=1"></script>
+  <script src="assets/js/n8n-api.js?v=3" data-exigir-permissoes></script>
+  <script src="assets/js/portal-permissoes.js?v=1"></script>
   <script>
+    // A aba Paginas (coluna API) prevalece quando configurada; este valor fica como reserva.
     const API_URL = "https://script.google.com/macros/s/AKfycbzu4XPQh9tq7Aagt6a5XTflS4epKmXXktem1QDLYKadDYagZLFYj_I6Oa-GJx0EXoVp/exec";
     let taxaUSD = 5.50;
     const dataHoje = new Date().toLocaleDateString('pt-BR');
@@ -246,7 +248,8 @@
       loader.classList.add("show");
       try {
         const data = await PortalN8N.callAPI(action, payload, async () => {
-            const response = await fetch(API_URL, {
+            const paginaApi = await PortalPermissoes.apiDaPagina(API_URL);
+            const response = await fetch(paginaApi, {
                 method: "POST",
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify({ action, payload }),

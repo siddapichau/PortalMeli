@@ -187,11 +187,13 @@
     </div>
   </main>
 
-  <script src="assets/js/n8n-api.js?v=1"></script>
+  <script src="assets/js/n8n-api.js?v=3" data-exigir-permissoes></script>
+  <script src="assets/js/portal-permissoes.js?v=1"></script>
   <script>
     // ==========================================
     // ⚙️ CONFIGURAÇÃO
     // ==========================================
+    // A aba Paginas (coluna API) prevalece quando configurada; este valor fica como reserva.
     const API_URL = 'https://script.google.com/macros/s/AKfycbzVYANA0UnJFSWBgHF4rrUs_FVEMH38uwhHM-bTyvYFyEBEHv2DiC6bmgxkl7LwuUNU/exec';
 
     const TTL_SEARCH_MS = 3 * 60 * 1000;
@@ -221,7 +223,8 @@
 
       try {
         const data = await PortalN8N.callAPI(action, payload, async () => {
-          const resp = await fetch(API_URL, {
+          const paginaApi = await PortalPermissoes.apiDaPagina(API_URL);
+          const resp = await fetch(paginaApi, {
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain' },

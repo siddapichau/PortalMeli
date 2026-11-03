@@ -386,8 +386,10 @@
     </div>
   </div>
 
-  <script src="assets/js/n8n-api.js?v=1"></script>
+  <script src="assets/js/n8n-api.js?v=3" data-exigir-permissoes></script>
+  <script src="assets/js/portal-permissoes.js?v=1"></script>
   <script>
+    // A aba Paginas (coluna API) prevalece quando configurada; este valor fica como reserva.
     const API_URL = 'https://script.google.com/macros/s/AKfycbxeN7QP509TPTcO1yoSkcJPoxpevevcu9spSqg8v-Ytq68BWuGmESn6hTFBb25NIjmHpA/exec';
     const ML_LOGO = 'https://upload.wikimedia.org/wikipedia/pt/0/04/Logotipo_MercadoLivre.png';
 
@@ -442,7 +444,8 @@
     
     async function callAPI(action, payload = {}) {
       return PortalN8N.callAPI(action, payload, async () => {
-        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }), redirect: 'follow' });
+        const paginaApi = await PortalPermissoes.apiDaPagina(API_URL);
+        const res = await fetch(paginaApi, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }), redirect: 'follow' });
         const text = await res.text();
         try { return JSON.parse(text); } catch (e) { throw new Error('Erro API: ' + text.substring(0, 100)); }
       });

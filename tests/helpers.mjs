@@ -62,15 +62,61 @@ export function legacyUrl(source, filename) {
   throw new Error(`API_URL não encontrada em ${filename}`);
 }
 
-export function createAdapter(fetchImpl, timers = {}) {
+/**
+ * Carrega o adaptador n8n em um contexto isolado.
+ * Por padrão informa uma política que permite edição (`podeEditar`), porque
+ * estes testes verificam o contrato de rede do adaptador, não permissões.
+ * Passe `permitirEdicao: false` para testar o bloqueio.
+ * @param {Function} fetchImpl
+ * @param {Object} [timers]
+ * @param {{permitirEdicao?: boolean}} [opcoes]
+ */
+export function createAdapter(fetchImpl, timers = {}, opcoes = {}) {
+  const podeEditar = opcoes.permitirEdicao !== false;
   const context = vm.createContext({
     fetch: fetchImpl,
     AbortController,
     setTimeout: timers.setTimeout ?? setTimeout,
-    clearTimeout: timers.clearTimeout ?? clearTimeout
+    clearTimeout: timers.clearTimeout ?? clearTimeout,
+    // Simula a marca `data-exigir-permissoes` da tag <script> (páginas de ferramenta).
+    ...(opcoes.semPolitica ? {
+      document: { currentScript: { hasAttribute: atributo => atributo === 'data-exigir-permissoes' } },
+      console: { warn() {} }
+    } : {}),
+    ...(opcoes.semPolitica ? {} : {
+      PortalPermissoes: {
+        podeExecutarAcao: acao => {
+          if (podeEditar || /^(get|listar|ler|obter|buscar|verificar|consultar|carregar)/i.test(String(acao || ''))) return true;
+          throw new Error('somente leitura (teste)');
+        },
+        planilhaIdDaPagina: () => ''
+      }
+    })
   });
   vm.runInContext(read('assets/js/n8n-api.js'), context, { filename: 'n8n-api.js' });
   return context.PortalN8N;
+}
+
+/**
+ * Carrega a política de permissões em um contexto isolado.
+ * Sem `document`/`localStorage`, a auto-inicialização não roda e a política
+ * fica "não carregada" (comportamento antigo), o que serve para testar as
+ * páginas sem simular a API central.
+ */
+export function createPermissoes(opcoes = {}) {
+  const context = vm.createContext({
+    fetch: opcoes.fetch ?? (async () => jsonResponse({})),
+    AbortController,
+    setTimeout,
+    clearTimeout,
+    console: { warn() {}, error() {} },
+    ...(opcoes.localStorage ? { localStorage: opcoes.localStorage } : {}),
+    ...(opcoes.document ? { document: opcoes.document } : {}),
+    ...(opcoes.location ? { location: opcoes.location } : {}),
+    ...(opcoes.Swal ? { Swal: opcoes.Swal } : {})
+  });
+  vm.runInContext(read('assets/js/portal-permissoes.js'), context, { filename: 'portal-permissoes.js' });
+  return context.PortalPermissoes;
 }
 
 export function recordingFetch(handler) {

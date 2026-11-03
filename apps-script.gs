@@ -265,12 +265,21 @@ function getPageConfig_(input) {
   const auth = requireUser_(input.token);
   if (!auth.ok) return auth;
 
-  const arquivo = String(input.arquivo || "").trim();
+  // Aceita o nome do arquivo direto ou uma URL/caminho completo
+  // (o portal abre a página com ?arquivo=... e a página também pode enviar sua URL).
+  const arquivo = extractFileName_(input.arquivo);
   if (!arquivo) return { ok: false, error: "Informe o arquivo da página (ex.: avarias.html)." };
 
-  const page = readRows_("Paginas").find(function(p) {
+  ensurePageColumns_();
+  const paginas = readRows_("Paginas");
+  let page = paginas.find(function(p) {
     return String(p.Arquivo || "").trim() === arquivo;
   });
+  if (!page) {
+    page = paginas.find(function(p) {
+      return String(p.URL || "").trim() && extractFileName_(p.URL) === arquivo;
+    });
+  }
   if (!page || !truthy_(page.Ativo)) return { ok: false, error: "Página não encontrada ou inativa." };
 
   let podeVer, podeEditar;
@@ -790,6 +799,37 @@ function extractSpreadsheetId_(value) {
   if (match) return match[1];
   if (/^[a-zA-Z0-9-_]{20,}$/.test(text)) return text;
   return "";
+}
+
+/**
+ * Extrai o nome do arquivo HTML de um valor que pode ser o nome puro,
+ * um caminho ou uma URL completa. Usado por obterConfigPagina.
+ */
+function extractFileName_(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const semQuery = text.split("?")[0].split("#")[0];
+  const partes = semQuery.split("/").filter(function(part) { return part; });
+  const ultima = partes.length ? partes[partes.length - 1] : "";
+  return ultima.replace(/[^a-zA-Z0-9._-]/g, "");
+}
+
+/**
+ * Garante as colunas API e Planilha na aba Paginas sem apagar dados.
+ * Se a planilha foi preparada por uma versão antiga do setup, as linhas
+ * existentes ficam sem essas colunas e a página abriria sem API própria.
+ * Nada é preenchido automaticamente: o admin define os valores.
+ */
+function ensurePageColumns_() {
+  const sh = sheet_("Paginas");
+  const ultimaColuna = sh.getLastColumn();
+  if (ultimaColuna < 1) return;
+  const cabecalho = sh.getRange(1, 1, 1, ultimaColuna).getValues()[0].map(String);
+  const novas = PORTAL.SHEETS.Paginas.filter(function(coluna) {
+    return cabecalho.indexOf(coluna) === -1;
+  });
+  if (!novas.length) return;
+  sh.getRange(1, cabecalho.length + 1, 1, novas.length).setValues([novas]).setFontWeight("bold");
 }
 
 function normalizeEmail_(value) {

@@ -310,8 +310,10 @@
   </div>
 </div>
 
-<script src="assets/js/n8n-api.js?v=1"></script>
+<script src="assets/js/n8n-api.js?v=3" data-exigir-permissoes></script>
+<script src="assets/js/portal-permissoes.js?v=1"></script>
 <script>
+// A aba Paginas (coluna API) prevalece quando configurada; este valor fica como reserva.
 const API_URL = 'https://script.google.com/macros/s/AKfycbwBYVga-nnSAa48v7SnpHVVp_1hFWzzWDohf12__bV6P2NqxpFD_vA-1yNKZQ-gqz0QGA/exec';
 const BIPAR_URL = 'biparinventario.html';
 
@@ -379,7 +381,8 @@ async function callAPI(action, payload = {}) {
   mostrarLoader();
   try {
     const data = await PortalN8N.callAPI(action, payload, async () => {
-      const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }) });
+      const paginaApi = await PortalPermissoes.apiDaPagina(API_URL);
+      const resp = await fetch(paginaApi, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }) });
       return await resp.json();
     });
     if (data.erro) throw new Error(data.erro); return data;
@@ -500,6 +503,8 @@ function editarEquipamento(idx) { const item = cacheEquipamentos.find(x => x.row
 function verificarSituacao() { if (document.getElementById('eq-situacao').value === 'Funcionando') { document.getElementById('eq-chamado').value = ''; document.getElementById('eq-observacao').value = ''; } }
 
 async function salvarEquipamento() {
+  try { PortalPermissoes.exigirEdicao(); }
+  catch (erro) { Swal.fire({ icon: 'warning', title: 'Somente leitura', text: erro.message }); return; }
   const payload = {
     rowIndex: document.getElementById('eq-rowIndex').value ? parseInt(document.getElementById('eq-rowIndex').value) : null,
     id: document.getElementById('eq-id').value.trim(), tipo: document.getElementById('eq-tipo').value,

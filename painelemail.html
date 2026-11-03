@@ -82,9 +82,11 @@ Obrigado.</textarea>
     <button class="btn" style="background: #2D3277;" onclick="window.close()">Finalizar e Fechar</button>
   </div>
 
-  <script src="assets/js/n8n-api.js?v=1"></script>
+  <script src="assets/js/n8n-api.js?v=3" data-exigir-permissoes></script>
+  <script src="assets/js/portal-permissoes.js?v=1"></script>
   <script>
     // ========= ⚠️ SUBSTITUA PELO SEU URL DO WEB APP AQUI =========
+    // A aba Paginas (coluna API) prevalece quando configurada; este valor fica como reserva.
     const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
     
     const successSound = new Audio('https://www.myinstants.com/media/sounds/success-bell.mp3');
@@ -94,7 +96,8 @@ Obrigado.</textarea>
 
     async function callAPI(action, payload = {}) {
       return PortalN8N.callAPI(action, payload, async () => {
-        const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+        const paginaApi = await PortalPermissoes.apiDaPagina(API_URL);
+      const response = await fetch(paginaApi, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
         return await response.json();
       });
     }

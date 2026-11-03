@@ -80,7 +80,7 @@ link da planilha de dados fixo num botão "Planilha".
   antes de finalizar.
 - Ao final de cada lote: abrir/atualizar o Pull Request desta branch pra
   `main` e mandar o link pro usuário (não fazer merge sozinho).
-- Cada sessão usa a branch informada pelo Arena. Nesta sessão (2026-11-03): `arena/093ca01d-portalmeli`. As branches citadas em logs antigos são histórico, não a branch atual.
+- Cada sessão usa a branch informada pelo Arena. Nesta sessão (2026-11-03): `arena/0620b4d2-portalmeli`. As branches citadas em logs antigos são histórico, não a branch atual.
 
 ## 4. O que já foi feito (histórico)
 
@@ -157,9 +157,15 @@ item 4 (ler config dinâmica + respeitar login/permissão, com fallback pro
       API central; revisar se precisam de algum ajuste fino depois que todas
       as páginas de ferramentas estiverem migradas)
 
-> **Próximo passo da migração dinâmica antiga: Lote 1.**
-> A inclusão do adaptador n8n nos 22 HTMLs (seção 8) **não** conclui essa fila:
-> `obterConfigPagina`, bloqueio por permissão e modo somente leitura continuam pendentes.
+> **Estado da fila:** a **política** de `obterConfigPagina` + bloqueio por permissão
+> + modo somente leitura foi implementada de forma transversal em 2026-11-03
+> (seção 9), cobrindo as 18 páginas de ferramenta de uma vez, com testes.
+> O que **ainda falta** nessa fila é apenas a troca definitiva do `API_URL`
+> hardcoded dentro de cada página por um valor 100% vindo da aba Paginas:
+> hoje a coluna `API` já prevalece em tempo de execução, mas o HTML ainda guarda
+> a URL antiga como reserva (fallback). Migrar os lotes 1–6 agora significa
+> **remover esse fallback** depois que cada Apps Script individual estiver
+> reimplantado. Não é urgente e não bloqueia nada.
 
 ## 6. Como um novo chat deve continuar este trabalho
 
@@ -196,6 +202,14 @@ item 4 (ler config dinâmica + respeitar login/permissão, com fallback pro
   confirmado com o usuário: `1VgC0r0XBoD7MPdKi_eoORX73ETdcndzwpaIHV6Srx9Y`.
   Validação local com rede simulada passou; integração real n8n/CORS pendente.
   A fila de migração dinâmica da seção 5 continua pendente.
+- **2026-11-03 (sessão 2)** — Diagnóstico real do n8n + permissões ver/editar:
+  consulta real aos webhooks mostrou **404 "not registered"** em `ler-planilha`
+  e `atualizar-celula` (host no ar, workflow inativo/ausente). Criados
+  `scripts/verificar-n8n.mjs` (`npm run verificar:n8n`), `diagnostico.html` e
+  `docs/n8n/workflow-planilhas.json` para fechar essa lacuna. Implementada a
+  política de permissões (`assets/js/portal-permissoes.js`) nas 18 páginas de
+  ferramenta, com bloqueio de escrita antes de qualquer rede, bloqueio total sem
+  `podeVer` e falha fechada. Detalhes na seção 9.
 
 ## 8. Integração n8n adicionada em 2026-11-03
 
@@ -221,3 +235,64 @@ item 4 (ler config dinâmica + respeitar login/permissão, com fallback pro
   atualizar o cache/versão `?v=1`.
 - Esta entrega não alterou `apps-script.gs`, não fez deploy no site do usuário
   e não executou escritas reais em planilhas/webhooks.
+
+## 9. Permissões ver/editar e estado real do n8n (2026-11-03, sessão 2)
+
+### Diagnóstico do n8n (o que foi verificado de verdade)
+
+- `GET/POST https://portalmeli.app.n8n.cloud/webhook/ler-planilha` → **HTTP 404**
+  `{"code":404,"message":"The requested webhook \"GET ler-planilha\" is not registered."}`
+- `GET/POST .../webhook/atualizar-celula` → **404** idem.
+- `.../healthz` → `200 {"status":"ok"}`: a instância está no ar; o que falta é o
+  workflow publicado.
+- Conclusão: **o n8n não está 100% conectado**. As planilhas já passam pelo
+  adaptador n8n no código, mas recebem erro até o workflow ser ativado.
+
+### O que foi criado para fechar a lacuna
+
+- `scripts/verificar-n8n.mjs` + `npm run verificar:n8n`: consulta as rotas reais,
+  distingue "não publicado" (404 do n8n) de "sem acesso nesta máquina"
+  (rede/TLS local), com códigos de saída 0/1/2/3. Não grava nada.
+- `diagnostico.html`: o mesmo teste pelo navegador, sem DevTools.
+- `docs/n8n/workflow-planilhas.json`: workflow pronto para importar, com os paths
+  `ler-planilha` e `atualizar-celula`, webhook em `responseMode: responseNode`,
+  CORS liberado e resposta no contrato das telas.
+
+### Permissões ver/editar
+
+- Novo `assets/js/portal-permissoes.js`, carregado nas **18 páginas de ferramenta**
+  depois do `n8n-api.js` e antes do script da página.
+- Consulta `obterConfigPagina` uma vez por carregamento e aplica:
+  `podeVer=false` → bloqueia a página; `podeEditar=false` → somente leitura com
+  aviso fixo, bloqueio de handlers de escrita e bloqueio no adaptador antes de
+  qualquer requisição (inclusive antes do fallback do Apps Script).
+- Falha fechada: sem token, sem API, timeout ou resposta inválida → somente leitura.
+- `?modo=ver` vindo do portal força somente leitura sem consultar a API.
+- `portal.html` agora envia `modo`, `arquivo` e grava a `apiUrl` da página no
+  `localStorage`; a coluna **API** da aba Paginas passa a valer de verdade.
+- `admin.html`: marcar "editar" liga "ver"; desmarcar "ver" desliga "editar"
+  (mesma regra do backend).
+- `apps-script.gs`: `obterConfigPagina` agora aceita nome ou URL no `arquivo`
+  (novo `extractFileName_`) e garante as colunas API/Planilha sem apagar dados
+  (`ensurePageColumns_`). Nenhuma função existente foi alterada.
+- Guia: `docs/PERMISSOES_VER_EDITAR.md`.
+
+### Estado dos testes
+
+`npm run check`: lint + sintaxe de 23 HTMLs + **55 testes** + **12 testes de
+navegador**, todos passando. Os testes percorrem todos os handlers inline e
+falham se uma função nova ficar sem classificação de leitura/escrita.
+
+### Pendências reais (para o usuário)
+
+1. **n8n:** importar `docs/n8n/workflow-planilhas.json`, ligar a credencial do
+   Google Sheets, ativar o workflow e rodar `npm run verificar:n8n` (ou abrir
+   `diagnostico.html`). Sem isso, nenhuma escrita/leitura via n8n funciona.
+2. **Apps Script:** colar o `apps-script.gs` atualizado e publicar nova versão da
+   implantação existente (sem trocar a URL `/exec`). Sem `obterConfigPagina`, as
+   ferramentas abrem em somente leitura (falha fechada) — é o comportamento
+   esperado, não um bug.
+3. **Admin:** preencher `Arquivo` de cada página com o nome exato do HTML e
+   revisar as permissões de ver/editar de cada usuário.
+4. **Fila da seção 5:** só resta remover o `API_URL` de reserva de cada HTML
+   depois que o Apps Script individual de cada página estiver reimplantado.

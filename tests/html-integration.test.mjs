@@ -5,7 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   ROOT, ID_PLANILHA, N8N_BASE_URL, htmlFiles, read, inlineScripts,
-  walk, findFunction, legacyUrl, createAdapter, recordingFetch, jsonResponse
+  walk, findFunction, legacyUrl, createAdapter, createPermissoes, recordingFetch, jsonResponse
 } from './helpers.mjs';
 
 const nestedPages = new Set([
@@ -14,7 +14,12 @@ const nestedPages = new Set([
   'equipamentos.html', 'fazerdevolucao.html', 'missorted.html',
   'pokainventario.html', 'pokayoke.html', 'semidciclos.html', 'semidciclos2.html'
 ]);
-const wrapperPages = htmlFiles.filter(name => !['admin.html', 'portal.html', 'login.html', 'limpar.html'].includes(name));
+const wrapperPages = htmlFiles.filter(name => !['admin.html', 'portal.html', 'login.html', 'limpar.html', 'diagnostico.html'].includes(name));
+// Páginas de ferramenta: carregam a política de ver/editar. Login, portal, admin
+// e limpar são telas de autenticação/serviço e não passam por obterConfigPagina.
+const paginasComPermissao = new Set(wrapperPages);
+// diagnóstico é uma ferramenta de teste: não é página de negócio e não passa por obterConfigPagina.
+const paginasDeServico = new Set(['diagnostico.html']);
 const loaderPages = new Set([
   'aduanas.html', 'agingdevolucao.html', 'analisedeslocados.html',
   'ativosbpp.html', 'avarias.html', 'equipamentos.html', 'missorted.html',
@@ -41,6 +46,7 @@ function pageContext(filename, handler) {
     API_URL: legacyUrl(read(filename), filename),
     fetch: mock.fetch,
     PortalN8N: createAdapter(mock.fetch),
+    PortalPermissoes: createPermissoes(),
     document: { getElementById: () => loader },
     Swal: { fire: (...args) => alerts.push(args) },
     mostrarLoader: () => loader.classList.add('active'),
@@ -58,14 +64,18 @@ function assertLoaderHidden(filename, loader) {
   else if (loaderPages.has(filename)) assert.equal(loader.classList.contains('show'), false);
 }
 
-test('todos os 22 HTMLs carregam uma única configuração compartilhada antes do código da página', () => {
-  assert.equal(htmlFiles.length, 22);
+test('todos os 23 HTMLs carregam uma única configuração compartilhada antes do código da página', () => {
+  assert.equal(htmlFiles.length, 23);
   for (const filename of htmlFiles) {
     const source = read(filename);
-    const tags = source.match(/<script src="assets\/js\/n8n-api\.js\?v=1"><\/script>/g) || [];
+    const tags = source.match(/<script src="assets\/js\/n8n-api\.js\?v=\d+"(?: data-exigir-permissoes)?><\/script>/g) || [];
     assert.equal(tags.length, 1, filename);
     assert.ok(source.indexOf(tags[0]) < source.search(/<script>/), filename);
     assert.equal(/\bconst\s+(?:ID_PLANILHA|N8N_BASE_URL)\b/.test(source), false, filename);
+    const permissoes = source.match(/<script src="assets\/js\/portal-permissoes\.js\?v=\d+"><\/script>/g) || [];
+    const deveTerPermissao = paginasComPermissao.has(filename) && !paginasDeServico.has(filename);
+    assert.equal(permissoes.length, deveTerPermissao ? 1 : 0, filename);
+    if (permissoes.length) assert.ok(source.indexOf(tags[0]) < source.indexOf(permissoes[0]), filename);
   }
   assert.ok(fs.existsSync(path.join(ROOT, 'assets/js/n8n-api.js')));
 });
@@ -78,7 +88,7 @@ test('todas as chamadas ao backend permanecem dentro de fallbacks explícitos do
         if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || node.callee.name !== 'fetch') return;
         const target = node.arguments[0];
         const isBackend = target && (
-          (target.type === 'Identifier' && ['API_URL', 'apiUrl', 'url'].includes(target.name)) ||
+          (target.type === 'Identifier' && ['API_URL', 'apiUrl', 'url', 'paginaApi'].includes(target.name)) ||
           (target.type === 'CallExpression' && target.callee.name === 'API')
         );
         if (!isBackend) return;

@@ -184,3 +184,13 @@ test('login, senhas, permissões e administração não têm rota n8n nesta etap
     assert.equal(Object.hasOwn(api.WEBHOOKS, action), false);
   }
 });
+
+test('sem política disponível a reserva libera leitura e bloqueia escrita', async () => {
+  const mock = recordingFetch(() => jsonResponse({ ok: true }));
+  const api = createAdapter(mock.fetch, {}, { semPolitica: true });
+  const leitura = await api.callAPI('getDashboardInit', {});
+  assert.deepEqual(JSON.parse(JSON.stringify(leitura)), { ok: true });
+  let legado = 0;
+  await assert.rejects(api.callAPI('salvarEdicaoAnalise', { id: '1' }, () => { legado += 1; }), /somente leitura/);
+  assert.equal(legado, 0);
+});

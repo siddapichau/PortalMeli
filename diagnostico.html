@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnóstico da integração — PortalMeli</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;padding:24px;background:#171c2b;color:#20283b;font-family:Segoe UI,Arial,sans-serif}
+  main{max-width:900px;margin:0 auto;background:#fff;border-radius:18px;padding:28px;box-shadow:0 20px 60px #0005}
+  h1{font-size:22px;margin:0 0 6px;color:#2D3277}
+  .sub{color:#65718a;font-size:13px;line-height:1.6;margin:0 0 20px}
+  button{padding:12px 20px;border:0;border-radius:10px;background:#FFD700;color:#20283b;font-weight:800;font-size:14px;cursor:pointer}
+  button:disabled{opacity:.55;cursor:progress}
+  .resumo{margin:18px 0;padding:14px 16px;border-radius:10px;font-weight:700;font-size:14px}
+  .ok{background:#e6f5ea;color:#136b32}
+  .erro{background:#fdeaea;color:#a01b1b}
+  .aviso{background:#fff6e0;color:#8a5b00}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #eef1f6;vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#65718a}
+  code{background:#f3f5f9;padding:2px 6px;border-radius:5px;font-size:12px}
+  .tag{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+  .tag.ok{background:#136b32;color:#fff}
+  .tag.erro{background:#a01b1b;color:#fff}
+  .tag.aviso{background:#e0a300;color:#241c00}
+  .tag.neutro{background:#e7ebf3;color:#465068}
+  ol{font-size:13px;line-height:1.8;color:#40495c;padding-left:20px}
+  .detalhe{color:#65718a;font-size:12px;margin-top:3px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Diagnóstico da integração n8n</h1>
+  <p class="sub">
+    Testa, a partir deste navegador, se os webhooks do n8n estão publicados e
+    respondendo no formato que as telas esperam. Nenhum dado é gravado: a rota de
+    escrita é chamada com payload vazio de propósito.
+  </p>
+  <button id="executar" type="button">Executar diagnóstico</button>
+
+  <div id="resumo" class="resumo" hidden></div>
+  <table id="tabela" hidden>
+    <thead><tr><th>Rota</th><th>Estado</th><th>Detalhe</th></tr></thead>
+    <tbody id="corpo"></tbody>
+  </table>
+
+  <div id="proximos" hidden>
+    <h2 style="font-size:15px;margin:22px 0 8px;color:#2D3277">O que fazer com o resultado</h2>
+    <ol>
+      <li><b>NÃO PUBLICADO:</b> abra o workflow no n8n, confirme o path e ligue o botão <b>Active</b>. Webhooks de teste (<code>/webhook-test/</code>) não servem para o portal.</li>
+      <li><b>CORS:</b> se o navegador acusar bloqueio, libere a origem do portal no nó Webhook (Allowed Origins) ou no proxy.</li>
+      <li><b>Contrato:</b> <code>ler-planilha</code> deve devolver JSON com <code>abas</code>/<code>dadosCompletos</code>; <code>atualizar-celula</code> deve devolver <code>success:true</code> ou <code>erro</code>.</li>
+      <li><b>Planilha:</b> confirme que a credencial do Google Sheets acessa a cópia de teste e que a coluna <b>Planilha</b> da aba Paginas aponta para ela.</li>
+    </ol>
+  </div>
+</main>
+<script src="assets/js/n8n-api.js?v=3"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const BASE=PortalN8N.N8N_BASE_URL;
+const PLANILHA=PortalN8N.ID_PLANILHA;
+const TIMEOUT=20000;
+
+const ROTAS=[
+  {
+    endpoint:"ler-planilha",
+    acao:"getDashboardInit / obterDadosLogisticos",
+    corpo:{spreadsheetId:PLANILHA},
+    validar:d=>{
+      if(!d||typeof d!=="object")return "a resposta não é um objeto JSON";
+      if(d.erro)return "a rota respondeu erro: "+d.erro;
+      if(!("abas" in d)&&!("dadosCompletos" in d)&&!("dadosDashboard" in d))return "faltam os campos abas/dadosCompletos/dadosDashboard";
+      return "";
+    }
+  },
+  {
+    endpoint:"atualizar-celula",
+    acao:"salvarEdicaoAnalise",
+    corpo:{spreadsheetId:PLANILHA,nomeAba:"",id:"",coluna:"",valor:""},
+    tolerante:true,
+    validar:d=>{
+      if(!d||typeof d!=="object")return "a resposta não é um objeto JSON";
+      if(d.success===true)return "";
+      if(d.erro)return "rejeitou o payload vazio (esperado): "+d.erro;
+      return "resposta sem success=true e sem o campo erro";
+    }
+  }
+];
+
+async function chamar(rota){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),TIMEOUT);
+  const inicio=Date.now();
+  try{
+    const resposta=await fetch(BASE+rota.endpoint,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(rota.corpo),
+      signal:controller.signal
+    });
+    const texto=await resposta.text();
+    let dados=null;
+    try{dados=JSON.parse(texto)}catch{/* resposta não JSON */}
+    return{status:resposta.status,ms:Date.now()-inicio,dados,texto:texto.slice(0,300),cors:resposta.headers.get("access-control-allow-origin")};
+  }catch(erro){
+    return{erro:erro.name==="AbortError"?"sem resposta em "+Math.round(TIMEOUT/1000)+"s":erro.message,ms:Date.now()-inicio};
+  }finally{clearTimeout(timer)}
+}
+
+function classificar(resultado,rota){
+  if(resultado.erro){
+    const local=/fetch|NetworkError|Failed|CORS|ECONN|certificate|SSL/i.test(resultado.erro);
+    return{estado:"erro",rotulo:"SEM CONEXÃO",detalhe:local
+      ?"Não foi possível falar com o n8n ("+resultado.erro+"). Verifique internet, firewall ou CORS."
+      :resultado.erro};
+  }
+  if(resultado.status===404){
+    let dica=resultado.texto;
+    try{const corpo=JSON.parse(resultado.texto);if(corpo.message)dica=corpo.message}catch{/* mantém texto */}
+    return{estado:"erro",rotulo:"NÃO PUBLICADO",detalhe:"HTTP 404 — "+dica};
+  }
+  if(resultado.status>=500)return{estado:"erro",rotulo:"FALHOU",detalhe:"HTTP "+resultado.status+" — "+resultado.texto};
+  if(!resultado.dados)return{estado:"erro",rotulo:"RESPOSTA INVÁLIDA",detalhe:"HTTP "+resultado.status+" sem JSON: "+resultado.texto};
+  const problema=rota.validar(resultado.dados);
+  if(!problema)return{estado:"ok",rotulo:"CONECTADO",detalhe:"HTTP "+resultado.status+" em "+resultado.ms+" ms"+(resultado.cors?" · CORS: "+resultado.cors:"")};
+  return{estado:rota.tolerante?"aviso":"erro",rotulo:rota.tolerante?"ATENÇÃO":"CONTRATO DIVERGENTE",detalhe:problema};
+}
+
+$("executar").addEventListener("click",async()=>{
+  const botao=$("executar");
+  botao.disabled=true;
+  botao.textContent="Testando...";
+  $("corpo").innerHTML="";
+  $("tabela").hidden=false;
+  $("resumo").hidden=true;
+  $("proximos").hidden=true;
+
+  const resultados=[];
+  for(const rota of ROTAS){
+    const resultado=await chamar(rota);
+    const avaliacao=classificar(resultado,rota);
+    resultados.push({rota,...avaliacao});
+    const linha=document.createElement("tr");
+    const td1=document.createElement("td");
+    td1.innerHTML="<code></code>";
+    td1.querySelector("code").textContent=rota.endpoint;
+    const pequeno=document.createElement("div");
+    pequeno.className="detalhe";
+    pequeno.textContent=rota.acao;
+    td1.append(pequeno);
+    const td2=document.createElement("td");
+    const etiqueta=document.createElement("span");
+    etiqueta.className="tag "+(avaliacao.estado==="ok"?"ok":avaliacao.estado==="aviso"?"aviso":"erro");
+    etiqueta.textContent=avaliacao.rotulo;
+    td2.append(etiqueta);
+    const td3=document.createElement("td");
+    td3.textContent=avaliacao.detalhe;
+    linha.append(td1,td2,td3);
+    $("corpo").append(linha);
+  }
+
+  const conectadas=resultados.filter(item=>item.estado==="ok").length;
+  const resumo=$("resumo");
+  resumo.hidden=false;
+  if(conectadas===resultados.length){
+    resumo.className="resumo ok";
+    resumo.textContent="Integração n8n conectada: "+conectadas+"/"+resultados.length+" rotas respondendo no contrato esperado.";
+  }else if(conectadas===0){
+    resumo.className="resumo erro";
+    resumo.textContent="Nenhuma rota do n8n está respondendo corretamente. As planilhas não podem usar o n8n até isso ser publicado.";
+  }else{
+    resumo.className="resumo aviso";
+    resumo.textContent="Integração parcial: "+conectadas+"/"+resultados.length+" rotas conectadas.";
+  }
+  $("proximos").hidden=false;
+  botao.disabled=false;
+  botao.textContent="Testar novamente";
+});
+</script>
+</body>
+</html>
