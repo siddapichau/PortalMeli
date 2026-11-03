@@ -4,6 +4,23 @@
 > permissões de ver/editar): ver [`continuidade/CONTINUIDADE.md`](continuidade/CONTINUIDADE.md)
 > para o estado atual, as regras da migração e a fila de arquivos pendentes.
 
+## Integração de teste com n8n
+
+Os 22 HTMLs agora carregam a configuração compartilhada [`assets/js/n8n-api.js`](assets/js/n8n-api.js).
+As ações `getDashboardInit`, `obterDadosLogisticos`, `salvarEdicaoAnalise` e `salvarUsuario` têm rotas n8n; as demais continuam no Apps Script original até receberem um webhook próprio.
+Login, senhas, permissões e administração **não** foram enviados ao n8n.
+
+- Guia completo, contratos JSON e roteiro de teste: [`docs/INTEGRACAO_N8N.md`](docs/INTEGRACAO_N8N.md).
+- Ao publicar, enviar os HTMLs **e** a pasta `assets/`.
+- Uma escrita que falhar no n8n não é repetida automaticamente no Apps Script, para evitar duplicação.
+- A validação local usa respostas simuladas; a implantação real do n8n/CORS ainda precisa ser testada no domínio.
+
+```bash
+npm ci
+npm run check   # lint + sintaxe dos HTMLs + testes unitários/integração + Chromium
+npm start       # preview estático em http://localhost:3000/login.html
+```
+
 ## Arquivos usados em produção
 
 - `portal.html` — portal, menu hierárquico, favoritos por usuário e carregamento das páginas no iframe.
@@ -63,7 +80,7 @@ A solicitação cria um registro pendente na aba `Solicitacoes`. Ela não cria u
 
 ## Limites de validação
 
-A sintaxe JavaScript dos HTMLs e a sintaxe do Apps Script foram verificadas localmente. A integração real com a sua implantação, planilha, CORS e permissões ainda precisa ser testada no domínio. Não foi feita alteração diretamente no seu site ou na sua planilha.
+A sintaxe JavaScript dos HTMLs e do Apps Script é verificada por `npm run lint`. Há testes automatizados de unidade/integração (`npm test`) e de navegador (`npm run test:browser`), todos com rede simulada. A integração real com a sua implantação n8n/Apps Script, planilha, CORS e permissões ainda precisa ser testada no domínio. Não foi feita alteração diretamente no seu site ou na sua planilha.
 
 
 ## Atualizações da versão visual

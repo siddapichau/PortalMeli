@@ -386,6 +386,7 @@
     </div>
   </div>
 
+  <script src="assets/js/n8n-api.js?v=1"></script>
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbxeN7QP509TPTcO1yoSkcJPoxpevevcu9spSqg8v-Ytq68BWuGmESn6hTFBb25NIjmHpA/exec';
     const ML_LOGO = 'https://upload.wikimedia.org/wikipedia/pt/0/04/Logotipo_MercadoLivre.png';
@@ -440,9 +441,11 @@
     function abrirTela(id) { document.querySelectorAll('.screen').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
     
     async function callAPI(action, payload = {}) {
-      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }), redirect: 'follow' });
-      const text = await res.text();
-      try { return JSON.parse(text); } catch (e) { throw new Error('Erro API: ' + text.substring(0, 100)); }
+      return PortalN8N.callAPI(action, payload, async () => {
+        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }), redirect: 'follow' });
+        const text = await res.text();
+        try { return JSON.parse(text); } catch (e) { throw new Error('Erro API: ' + text.substring(0, 100)); }
+      });
     }
 
     // ================================================================

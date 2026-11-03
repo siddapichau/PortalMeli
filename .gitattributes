@@ -1,0 +1,8 @@
+# Os HTMLs existentes usam CRLF (admin.html tem algumas linhas LF).
+# Preservar seus bytes evita diffs de arquivo inteiro nesta integração.
+*.html -text whitespace=cr-at-eol
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.gs text eol=lf

@@ -268,6 +268,7 @@
   </div>
 </div>
 
+<script src="assets/js/n8n-api.js?v=1"></script>
 <script>
 /* =====================================================
    CONFIG
@@ -293,12 +294,14 @@ async function callAPI(action, payload = {}) {
   const loader = document.getElementById('loader-overlay');
   loader.classList.add('show');
   try {
-    const res  = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, payload })
+    const data = await PortalN8N.callAPI(action, payload, async () => {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action, payload })
+        });
+        return await res.json();
     });
-    const data = await res.json();
     if (data && data.erro) throw new Error(data.erro);
     return data;
   } catch (err) {

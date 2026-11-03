@@ -103,6 +103,7 @@
     </div>
   </div>
 
+  <script src="assets/js/n8n-api.js?v=1"></script>
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
     
@@ -115,9 +116,11 @@
 
     async function callAPI(action, payload = {}) {
       try {
-        const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
-        return await response.json();
-      } catch (e) { throw new Error('Falha de conexão.'); }
+        return await PortalN8N.callAPI(action, payload, async () => {
+          const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+          return await response.json();
+        });
+      } catch (e) { throw new Error(e.message || 'Falha de conexão.'); }
     }
 
     /**
@@ -159,8 +162,7 @@
       // Polling com o servidor para pegar o texto exato (setProgress)
       progressInterval = setInterval(async () => {
          try { 
-             let chk = await fetch(API_URL, { method: 'POST', body: JSON.stringify({action: 'verificarProgresso'}) }); 
-             let chkJson = await chk.json(); 
+             let chkJson = await callAPI('verificarProgresso');
              let msgEl = document.getElementById('swal-progresso'); 
              if (msgEl && chkJson.msg) msgEl.innerText = chkJson.msg; 
          } catch(e) {}

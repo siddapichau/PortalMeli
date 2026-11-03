@@ -57,6 +57,7 @@ label{display:block;font-size:12px;font-weight:750;margin:17px 0 7px}input{width
   </form>
  </div>
 </section>
+<script src="assets/js/n8n-api.js?v=1"></script>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
@@ -77,9 +78,12 @@ requestForm.addEventListener("submit",async e=>{
 
  const btn=$("sendRequest");btn.disabled=true;btn.textContent="Enviando solicitação...";
  try{
-  const response=await fetch(apiUrl,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"solicitarAcesso",email,nome,senha})});
-  const result=await response.json();
-  if(!response.ok||!result.ok)throw Error(result.error||"Não foi possível registrar a solicitação.");
+  const result=await PortalN8N.callAPI("solicitarAcesso",{email,nome,senha},async()=>{
+   const response=await fetch(apiUrl,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"solicitarAcesso",email,nome,senha})});
+   const out=await response.json();
+   if(!response.ok||!out.ok)throw Error(out.error||"Não foi possível registrar a solicitação.");
+   return out;
+  });
   closeRequestModal();requestForm.reset();showError(result.message||"Solicitação registrada. O administrador analisará seu pedido.");$("errorMessage").classList.add("success");
  }catch(error){showError(error.message==="Failed to fetch"?"Não foi possível conectar à API. Tente novamente.":error.message)}
  finally{btn.disabled=false;btn.textContent="Enviar solicitação"}
@@ -95,14 +99,17 @@ $("loginForm").addEventListener("submit",async event=>{
   if(!email||!senha){showError("Informe seu e-mail e sua senha.");return;}
   $("submitButton").disabled=true;$("submitButton").textContent="Verificando acesso...";
   try{
-    const response=await fetch(apiUrl,{
-      method:"POST",redirect:"follow",
-      headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({action:"login",email,senha,userAgent:navigator.userAgent})
+    const result=await PortalN8N.callAPI("login",{email,senha,userAgent:navigator.userAgent},async()=>{
+      const response=await fetch(apiUrl,{
+        method:"POST",redirect:"follow",
+        headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify({action:"login",email,senha,userAgent:navigator.userAgent})
+      });
+      if(!response.ok)throw new Error("Erro de comunicação com a API (HTTP "+response.status+").");
+      const out=await response.json();
+      if(!out.ok)throw new Error(out.error||"Credenciais inválidas.");
+      return out;
     });
-    if(!response.ok)throw new Error("Erro de comunicação com a API (HTTP "+response.status+").");
-    const result=await response.json();
-    if(!result.ok)throw new Error(result.error||"Credenciais inválidas.");
     const data=result.data||result;
     if(!data.token)throw new Error("A API não retornou um token de sessão.");
     localStorage.setItem("token",data.token);

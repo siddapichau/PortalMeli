@@ -167,6 +167,7 @@
     </form>
   </div>
 
+  <script src="assets/js/n8n-api.js?v=1"></script>
   <script>
     // ==========================================
     // CONFIGURAÇÃO DA API
@@ -181,12 +182,14 @@
       loader.style.display = 'flex';
 
       try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action, payload })
+        const data = await PortalN8N.callAPI(action, payload, async () => {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, payload })
+            });
+            return await response.json();
         });
-        const data = await response.json();
         if (data.erro) throw new Error(data.erro);
         return data;
       } catch (err) {
