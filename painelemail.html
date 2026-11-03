@@ -82,6 +82,7 @@ Obrigado.</textarea>
     <button class="btn" style="background: #2D3277;" onclick="window.close()">Finalizar e Fechar</button>
   </div>
 
+  <script src="assets/js/n8n-api.js?v=1"></script>
   <script>
     // ========= ⚠️ SUBSTITUA PELO SEU URL DO WEB APP AQUI =========
     const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
@@ -90,6 +91,13 @@ Obrigado.</textarea>
 
     function mostrarLoading(msg) { document.getElementById('loading-txt').innerText = msg; document.getElementById('loading').style.display = 'flex'; }
     function ocultarLoading() { document.getElementById('loading').style.display = 'none'; }
+
+    async function callAPI(action, payload = {}) {
+      return PortalN8N.callAPI(action, payload, async () => {
+        const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+        return await response.json();
+      });
+    }
 
     async function dispararEmails() {
       const template = document.getElementById('txt-template').value;
@@ -101,20 +109,14 @@ Obrigado.</textarea>
       
       let tracker = setInterval(async () => {
          try {
-           let chk = await fetch(API_URL, { method: 'POST', body: JSON.stringify({action: 'verificarProgresso'}) });
-           let chkJson = await chk.json();
+           let chkJson = await callAPI('verificarProgresso');
            let msgEl = document.getElementById('loading-txt');
            if (msgEl && chkJson.msg) msgEl.innerText = chkJson.msg;
          } catch(e) {}
       }, 2500);
       
       try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'backendDispararEmails', isTeste: isTeste, templateText: template })
-        });
-        const res = await response.json();
+        const res = await callAPI('backendDispararEmails', { isTeste: isTeste, templateText: template });
         
         clearInterval(tracker);
         ocultarLoading();

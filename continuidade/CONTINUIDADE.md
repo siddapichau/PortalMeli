@@ -80,7 +80,7 @@ link da planilha de dados fixo num botão "Planilha".
   antes de finalizar.
 - Ao final de cada lote: abrir/atualizar o Pull Request desta branch pra
   `main` e mandar o link pro usuário (não fazer merge sozinho).
-- Esta sessão de trabalho usa sempre a branch `arena/988cd33c-portalmeli`.
+- Cada sessão usa a branch informada pelo Arena. Nesta sessão (2026-11-03): `arena/093ca01d-portalmeli`. As branches citadas em logs antigos são histórico, não a branch atual.
 
 ## 4. O que já foi feito (histórico)
 
@@ -157,7 +157,9 @@ item 4 (ler config dinâmica + respeitar login/permissão, com fallback pro
       API central; revisar se precisam de algum ajuste fino depois que todas
       as páginas de ferramentas estiverem migradas)
 
-> **Próximo passo (próximo chat deve começar por aqui): Lote 1.**
+> **Próximo passo da migração dinâmica antiga: Lote 1.**
+> A inclusão do adaptador n8n nos 22 HTMLs (seção 8) **não** conclui essa fila:
+> `obterConfigPagina`, bloqueio por permissão e modo somente leitura continuam pendentes.
 
 ## 6. Como um novo chat deve continuar este trabalho
 
@@ -174,9 +176,9 @@ item 4 (ler config dinâmica + respeitar login/permissão, com fallback pro
    e resumo do que mudou.
 7. Rodar `git status` pra garantir que não sobrou lixo (ex.: pasta
    `google_drive/`).
-8. Commitar, dar `git push origin arena/988cd33c-portalmeli`.
-9. Abrir ou atualizar o Pull Request (`gh pr create`/`gh pr edit`) da branch
-   `arena/988cd33c-portalmeli` para `main` e mandar o link pro usuário.
+8. Commitar e dar push somente para a branch atual da sessão informada pelo Arena.
+9. Abrir ou atualizar o Pull Request dessa branch para `main` e mandar o link
+   pro usuário. Não fazer merge sem aprovação.
 
 ## 7. Log de sessões
 
@@ -187,3 +189,35 @@ item 4 (ler config dinâmica + respeitar login/permissão, com fallback pro
   ganhou os campos de API/Planilha no formulário de página; este arquivo de
   continuidade criado. **Nenhuma página de ferramenta (lote 1–6) foi migrada
   ainda.**
+- **2026-11-03** — Integração de teste n8n: criado `assets/js/n8n-api.js` e
+  incluído nos 22 HTMLs; 18 wrappers operacionais + portal/admin/login usam o
+  adaptador; somente as 4 ações com webhook definido vão ao n8n, demais mantêm
+  Apps Script; adicionados testes, servidor estático, guia e CI. ID da planilha
+  confirmado com o usuário: `1VgC0r0XBoD7MPdKi_eoORX73ETdcndzwpaIHV6Srx9Y`.
+  Validação local com rede simulada passou; integração real n8n/CORS pendente.
+  A fila de migração dinâmica da seção 5 continua pendente.
+
+## 8. Integração n8n adicionada em 2026-11-03
+
+- Arquivo único: `assets/js/n8n-api.js`, carregado nos 22 HTMLs como
+  `assets/js/n8n-api.js?v=1` antes do script inline da página.
+- Configuração: `ID_PLANILHA` de teste confirmado (44 caracteres) e
+  `N8N_BASE_URL = https://portalmeli.app.n8n.cloud/webhook/`.
+- Rotas: `getDashboardInit`/`obterDadosLogisticos` → `ler-planilha`;
+  `salvarEdicaoAnalise` → `atualizar-celula`; `salvarUsuario` →
+  `adicionar-linha` (reservada; nenhum HTML atual a chama).
+- Payload n8n é plano e recebe `spreadsheetId` automaticamente. O contrato de
+  resposta das telas foi preservado; o n8n precisa devolver os campos esperados.
+- Ações sem webhook usam o fallback original do Apps Script. Falha/timeout de
+  ação com webhook **não** aciona fallback, para não duplicar escrita.
+- Login, solicitação de acesso, token, permissões e administração permanecem no
+  Apps Script atual. Não enviar senhas para `adicionar-linha`.
+- Guia completo: `docs/INTEGRACAO_N8N.md`.
+- Testes: `npm run check` executa lint, sintaxe dos 22 HTMLs + Apps Script,
+  31 testes unitários/integração e 6 testes Chromium com rede simulada.
+- Pendências reais: publicar/autorizar os webhooks no n8n, configurar CORS,
+  validar contratos JSON e testar no domínio com a planilha de teste.
+- Ao publicar: enviar os HTMLs **e** a pasta `assets/`; ao mudar o JS,
+  atualizar o cache/versão `?v=1`.
+- Esta entrega não alterou `apps-script.gs`, não fez deploy no site do usuário
+  e não executou escritas reais em planilhas/webhooks.

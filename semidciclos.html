@@ -187,6 +187,7 @@
     </div>
   </main>
 
+  <script src="assets/js/n8n-api.js?v=1"></script>
   <script>
     // ==========================================
     // ⚙️ CONFIGURAÇÃO
@@ -219,25 +220,27 @@
       const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       try {
-        const resp = await fetch(API_URL, {
-          method: 'POST',
-          mode: 'cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: action, payload: payload }),
-          signal: controller.signal
+        const data = await PortalN8N.callAPI(action, payload, async () => {
+          const resp = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action: action, payload: payload }),
+            signal: controller.signal
+          });
+          if (!resp.ok) throw new Error("O Google retornou HTTP " + resp.status);
+          const text = await resp.text();
+          try {
+            const legacyData = JSON.parse(text);
+            if (legacyData.erro) throw new Error(legacyData.erro);
+            return legacyData;
+          } catch (jsonErr) {
+            throw new Error("Erro ao ler dados do servidor. Resposta não foi JSON.");
+          }
         });
         clearTimeout(timeoutId);
-
-        if (!resp.ok) throw new Error("O Google retornou HTTP " + resp.status);
-
-        const text = await resp.text();
-        try {
-          const data = JSON.parse(text);
-          if (data.erro) throw new Error(data.erro);
-          return data;
-        } catch (jsonErr) {
-          throw new Error("Erro ao ler dados do servidor. Resposta não foi JSON.");
-        }
+        if (data.erro) throw new Error(data.erro);
+        return data;
       } catch (e) {
         clearTimeout(timeoutId);
         if (e.name === 'AbortError') {

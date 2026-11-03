@@ -310,6 +310,7 @@
   </div>
 </div>
 
+<script src="assets/js/n8n-api.js?v=1"></script>
 <script>
 const API_URL = 'https://script.google.com/macros/s/AKfycbwBYVga-nnSAa48v7SnpHVVp_1hFWzzWDohf12__bV6P2NqxpFD_vA-1yNKZQ-gqz0QGA/exec';
 const BIPAR_URL = 'biparinventario.html';
@@ -377,8 +378,11 @@ function esconderLoader() { document.getElementById('loader-overlay').classList.
 async function callAPI(action, payload = {}) {
   mostrarLoader();
   try {
-    const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }) });
-    const data = await resp.json(); if (data.erro) throw new Error(data.erro); return data;
+    const data = await PortalN8N.callAPI(action, payload, async () => {
+      const resp = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, payload }) });
+      return await resp.json();
+    });
+    if (data.erro) throw new Error(data.erro); return data;
   } catch (err) { Swal.fire({ icon: 'error', title: 'Erro', text: err.message }); throw err; } 
   finally { esconderLoader(); }
 }

@@ -91,6 +91,7 @@ iframe{width:100%;height:100%;border:0;display:block;overflow-y:auto}
   <aside class="team"><h2>👥 Equipe no Portal</h2><div class="onlinehead"><span class="dot"></span>🟢 AGORA NO PORTAL</div><div id="onlineList"></div><div class="note">A presença de outros usuários depende de um serviço de presença conectado à API.</div><div class="divider"></div><div class="recenthead">Acessos Recentes</div><div class="recent"><div class="recenticon">👤</div><div class="recentinfo"><strong id="recentName">Sessão atual</strong><small id="recentEmail">Carregando...</small><span class="tag" id="recentRole">USER</span></div></div><div class="note">O histórico real de acessos exige registro de auditoria na API.</div></aside>
 </div>
 <div class="backdrop" id="backdrop"></div><div class="toastbox" id="toastbox" aria-live="polite"></div>
+<script src="assets/js/n8n-api.js?v=1"></script>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
@@ -106,9 +107,11 @@ async function api(action,data={}){
  const controller = new AbortController();
  const timeout = setTimeout(() => controller.abort(), 15000);
  try {
-   const res=await fetch(url,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...data}), signal: controller.signal});
-   if(!res.ok)throw Error("Erro HTTP "+res.status+" na API.");
-   const out=await res.json();if(!out.ok)throw Error(out.error||"A solicitação falhou.");return out;
+   return await PortalN8N.callAPI(action,data,async()=>{
+    const res=await fetch(url,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,...data}), signal: controller.signal});
+    if(!res.ok)throw Error("Erro HTTP "+res.status+" na API.");
+    const out=await res.json();if(!out.ok)throw Error(out.error||"A solicitação falhou.");return out;
+   });
  } finally {
    clearTimeout(timeout);
  }

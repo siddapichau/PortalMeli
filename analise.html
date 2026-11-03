@@ -188,6 +188,7 @@
     </table>
   </div>
 
+  <script src="assets/js/n8n-api.js?v=1"></script>
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycby4WP4m6JFNNNmToO6zkC_aYmWH3kEJWH2fbqHFhyOm0eoYXlIcmnr861dbjYlY3e4thA/exec';
     let dadosOriginais = [];
@@ -209,8 +210,10 @@
     }
 
     async function callAPI(action, payload = {}) {
-      const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
-      return await res.json();
+      return PortalN8N.callAPI(action, payload, async () => {
+        const res = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action, ...payload }) });
+        return await res.json();
+      });
     }
 
     function limparCache() {
