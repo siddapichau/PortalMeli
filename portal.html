@@ -91,7 +91,7 @@ iframe{width:100%;height:100%;border:0;display:block;overflow-y:auto}
   <aside class="team"><h2>👥 Equipe no Portal</h2><div class="onlinehead"><span class="dot"></span>🟢 AGORA NO PORTAL</div><div id="onlineList"></div><div class="note">A presença de outros usuários depende de um serviço de presença conectado à API.</div><div class="divider"></div><div class="recenthead">Acessos Recentes</div><div class="recent"><div class="recenticon">👤</div><div class="recentinfo"><strong id="recentName">Sessão atual</strong><small id="recentEmail">Carregando...</small><span class="tag" id="recentRole">USER</span></div></div><div class="note">O histórico real de acessos exige registro de auditoria na API.</div></aside>
 </div>
 <div class="backdrop" id="backdrop"></div><div class="toastbox" id="toastbox" aria-live="polite"></div>
-<script src="assets/js/n8n-api.js?v=1"></script>
+<script src="assets/js/n8n-api.js?v=3"></script>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
@@ -238,6 +238,12 @@ function openPage(p){
  if(!p||!p.podeVer){toast("Você não tem permissão para visualizar esta página.","error");return}
  try{
   const u=pageUrl(p);u.searchParams.set("modo",p.podeEditar?"editar":"ver");
+  // A política de ver/editar da página consulta a API central por `arquivo`.
+  const nomeArquivo=String(p.arquivo||"").split("/").pop();
+  if(nomeArquivo)u.searchParams.set("arquivo",nomeArquivo);
+  // A URL da API configurada no admin precisa chegar até a página aberta.
+  const apiDaPagina=String(p.api||"").trim();
+  if(/^https:\/\//.test(apiDaPagina))localStorage.setItem("apiUrl",apiDaPagina);
   if(token())u.searchParams.set("token",token());
   state.current=p;
   const routeName=(p.arquivo||p.id||"").split("/").pop();

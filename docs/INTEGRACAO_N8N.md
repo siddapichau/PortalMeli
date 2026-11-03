@@ -1,59 +1,77 @@
-# Integração de teste com n8n
+# Integração com n8n — estado verificado
 
-## Estado desta entrega
+## Resposta curta
 
-Os **22 HTMLs** carregam `assets/js/n8n-api.js?v=1` antes do JavaScript da página.
-O arquivo centraliza a configuração e evita copiar a mesma função para cada tela.
+**O n8n não estava 100% conectado.** Em 2026-11-03 a verificação real mostrou que
+os dois webhooks usados pelas planilhas respondem **404 "webhook not registered"**:
 
-- Planilha de teste confirmada: `1VgC0r0XBoD7MPdKi_eoORX73ETdcndzwpaIHV6Srx9Y` (44 caracteres).
-- Base n8n: `https://portalmeli.app.n8n.cloud/webhook/`
-- O ID de 43 caracteres enviado inicialmente na conversa **não** foi usado; o usuário confirmou o ID já registrado na continuidade e no botão Planilha do `pokainventario.html`.
-- Nenhuma credencial, token ou senha foi adicionado ao arquivo compartilhado.
-- Nenhuma chamada real ao n8n ou à planilha foi executada durante a validação local.
+```json
+{"code":404,"message":"The requested webhook \"GET ler-planilha\" is not registered.",
+ "hint":"The workflow must be active for a production URL to run successfully."}
+```
 
-## Rotas implementadas
+O mesmo aconteceu em `atualizar-celula`. O host `portalmeli.app.n8n.cloud` está no
+ar (`/healthz` responde `{"status":"ok"}`), mas **nenhum workflow com esses paths
+está ativo/publicado**. Sem isso, toda tela que lê ou grava planilha pelo n8n
+mostrava erro.
 
-| Ação antiga | Webhook POST | Corpo enviado |
+Foi verificado também que o n8n **não tem** nenhuma rota de login, senha,
+permissão ou administração — o que é intencional (ver "O que não vai para o n8n").
+
+## O que foi entregue para resolver
+
+| Item | Arquivo | Situação |
 |---|---|---|
-| `getDashboardInit` | `ler-planilha` | `{ spreadsheetId }` + campos do payload |
+| Verificar a conexão de verdade | `scripts/verificar-n8n.mjs` (`npm run verificar:n8n`) | pronto |
+| Verificar pelo navegador | `diagnostico.html` | pronto |
+| Workflow pronto para importar | `docs/n8n/workflow-planilhas.json` | pronto (falta importar/ativar no n8n) |
+| Adaptador das planilhas | `assets/js/n8n-api.js` | pronto |
+| Permissões ver/editar | `assets/js/portal-permissoes.js` | pronto |
+
+> **Pendência que só você pode fazer:** importar
+> `docs/n8n/workflow-planilhas.json` no n8n, ligar a credencial do Google Sheets
+> e ativar o workflow. Depois rodar `npm run verificar:n8n` ou abrir
+> `diagnostico.html` e confirmar os dois "CONECTADO".
+
+## Rotas e o que cada tela usa
+
+| Ação da tela | Webhook POST | Corpo enviado |
+|---|---|---|
+| `getDashboardInit` | `ler-planilha` | `{ spreadsheetId, ...payload }` |
 | `obterDadosLogisticos` | `ler-planilha` | `{ spreadsheetId, nomeAba, ... }` |
 | `salvarEdicaoAnalise` | `atualizar-celula` | `{ spreadsheetId, id, coluna, valor, nomeAba }` |
-| `salvarUsuario` | `adicionar-linha` | `{ spreadsheetId, ...campos do usuário }` |
+| `salvarUsuario` | `adicionar-linha` | reservado — nenhuma tela usa hoje |
 
-O corpo é **plano**: o adaptador não envia `{ action, payload }` para o n8n.
-O `spreadsheetId` configurado sempre prevalece sobre um eventual campo de mesmo nome no payload.
+Telas que leem pelo n8n: `dashboard.html`, `analise.html`, `a1.html`.
+Tela que grava pelo n8n: `a1.html` (duplo clique na linha).
 
-`salvarUsuario` está mapeado porque foi informado no exemplo, mas **nenhum HTML atual chama essa ação**.
-Não use `adicionar-linha` como fluxo de autenticação nem envie senhas em texto puro para a planilha.
-Login, solicitação de acesso, permissões, favoritos e administração continuam no Apps Script atual.
+### Planilhas usadas
 
-## Fallback e erros
+O adaptador usa, nesta ordem:
 
-- **Ação sem webhook:** usa a chamada original do Apps Script, preservando URL, headers, token, timeout e formato `action/payload` ou `action ...payload` daquela página.
-- **Ação com webhook:** usa somente o n8n.
-- **Falha/timeout/HTTP de erro no n8n:** mostra erro e **não** repete a operação no Apps Script. Isso evita gravar duas vezes quando o webhook concluiu a operação mas a resposta falhou.
-- Timeout do n8n: 45 segundos, com `AbortController`.
-- Resposta inválida ou HTML no lugar de JSON: erro explícito.
-- Os loaders e o parâmetro `showLoader` dos adaptadores existentes foram preservados.
+1. A coluna **Planilha** da aba `Paginas` (aceita ID puro ou a URL do Google Sheets),
+   configurada no painel administrativo → aba "Páginas".
+2. Se a página não tiver planilha configurada, o ID de teste
+   `1VgC0r0XBoD7MPdKi_eoORX73ETdcndzwpaIHV6Srx9Y`.
 
-## Contrato de resposta esperado pelo n8n
+O `spreadsheetId` do corpo sempre prevalece sobre o valor enviado pela tela;
+uma página não consegue redirecionar a gravação para outra planilha.
 
-O adaptador devolve o JSON recebido **sem renomear campos**. O workflow precisa responder no formato que a tela já espera; não basta devolver as linhas cruas do Google Sheets se a tela espera campos calculados.
+### API de cada página
+
+A coluna **API** da aba `Paginas` prevalece sobre a URL fixa no HTML. O portal
+repassa essa URL no `localStorage` (`apiUrl`) ao abrir a página, então a troca
+pode ser feita só pelo admin, sem editar HTML.
+
+## Contrato de resposta
+
+O adaptador devolve o JSON recebido **sem renomear campos**. O workflow precisa
+responder no formato que a tela já espera.
 
 ### `ler-planilha`
 
-Usado por `dashboard.html`, `analise.html` e `a1.html`.
-
-Campos consumidos pelas telas, conforme o caso:
-
-- `abaAtiva`
-- `abas`
-- `dadosCompletos` e/ou `dadosDashboard`
-- `avisos` (opcional)
-- `colunasAusentes` (opcional)
-- `cache` para a ação antiga `carregarBackground`, que ainda fica no Apps Script
-
-Exemplo mínimo para leitura:
+Campos consumidos: `abaAtiva`, `abas`, `dadosCompletos` e/ou `dadosDashboard`,
+`avisos` (opcional), `colunasAusentes` (opcional).
 
 ```json
 {
@@ -64,80 +82,96 @@ Exemplo mínimo para leitura:
 }
 ```
 
-Para dados reais, cada linha deve manter os campos/IDs que a tela usa, por exemplo `_idNum` no A1 e os campos calculados do dashboard (`id`, `desc`, `resp`, `statusInv`, `subStatus`, `ultMov`, `aging`, `valorNum`).
+Cada linha deve manter os campos que a tela usa: `_idNum` no A1 e os campos
+calculados do dashboard (`id`, `desc`, `resp`, `statusInv`, `subStatus`,
+`ultMov`, `aging`, `valorNum`).
 
 ### `atualizar-celula`
 
-Recebe `id`, `coluna`, `valor`, `nomeAba` e `spreadsheetId`.
-Responda sucesso com JSON, por exemplo:
+Sucesso:
 
 ```json
 { "success": true }
 ```
 
-Em erro de negócio, use HTTP 4xx/5xx **ou** o campo esperado pelas telas:
+Erro de negócio (HTTP 4xx/5xx **ou** campo `erro`):
 
 ```json
 { "erro": "Linha não encontrada na aba informada." }
 ```
 
-Não responda apenas `{ "success": false }`: parte das telas atuais verifica `erro`, não `success`.
+Não responda apenas `{"success": false}`: parte das telas verifica `erro`.
 
-### `adicionar-linha`
+## Erros, timeout e fallback
 
-Rota reservada para o exemplo `salvarUsuario`. Ainda não há tela chamando essa ação.
-Defina e documente o contrato antes de ligá-la a um fluxo real.
+- **Ação com webhook:** usa somente o n8n.
+- **Ação sem webhook:** usa a chamada original do Apps Script daquela página.
+- **Falha/timeout/HTTP de erro no n8n:** mostra erro e **não** repete no Apps
+  Script — o webhook pode ter concluído a operação mesmo sem responder.
+- Timeout do n8n: 45 segundos (`AbortController`).
+- Resposta HTML no lugar de JSON: erro explícito.
 
 ## Configuração necessária no n8n
 
-1. Criar/publicar os webhooks POST com os paths exatos: `ler-planilha`, `atualizar-celula`, `adicionar-linha`.
-2. Configurar o nó de resposta para devolver **JSON** no contrato acima.
-3. Permitir CORS para a origem do portal de teste e para o header `Content-Type`; responder ao preflight `OPTIONS`.
-4. Confirmar que a credencial do Google Sheets no n8n acessa somente a planilha de teste.
-5. Validar autorização no backend. O ID da planilha e a URL do webhook são identificadores públicos no frontend, não mecanismos de autenticação.
+1. Importar `docs/n8n/workflow-planilhas.json` (Workflows → Import from File).
+2. Abrir o nó **Google Sheets (abas)** e selecionar a credencial que acessa a
+   planilha de teste.
+3. Confirmar os paths exatos: `ler-planilha` e `atualizar-celula`.
+4. Ligar o workflow (**Active**) — URL de teste `/webhook-test/` não serve.
+5. Permitir CORS para a origem do portal e para o header `Content-Type`,
+   respondendo ao preflight `OPTIONS`.
 
-## Publicação dos arquivos
+O workflow importado já entrega o esqueleto com webhook + resposta JSON e um
+nó Google Sheets que lista as abas. A leitura das linhas de cada aba precisa ser
+ligada ao nó `Montar resposta ler-planilha` conforme as colunas reais — o
+workflow traz um aviso explícito no campo `avisos` enquanto isso não for feito.
 
-Ao subir para o servidor de teste, enviar **os 22 HTMLs e a pasta `assets/`**.
-Se apenas os HTMLs forem enviados, as páginas não encontrarão `PortalN8N`.
+## O que **não** vai para o n8n
 
-Ao alterar `assets/js/n8n-api.js`, alterar também o parâmetro de versão `?v=1` nos HTMLs ou invalidar o cache do servidor/CDN.
+Login, senha, solicitação de acesso, token de sessão, permissões e administração
+continuam no Apps Script atual. O n8n só vê `spreadsheetId` e os dados da
+planilha operacional. Não envie senhas para `adicionar-linha`.
 
-## Como testar localmente
-
-Requisito: Node.js 22.17 ou superior.
+## Como testar
 
 ```bash
 npm ci
-npm run lint
-npm test
-npm run test:browser
-# ou tudo:
-npm run check
-
-# preview estático local:
-npm start
+npm run check          # lint + sintaxe + 55 testes + 12 testes de navegador
+npm run verificar:n8n  # consulta os webhooks reais do n8n
 ```
 
-`npm start` abre o servidor em `0.0.0.0:3000` e redireciona `/` para `/login.html`.
-Ele não faz proxy nem chama webhooks durante a inicialização. As chamadas de API acontecem somente quando o usuário usa uma tela.
+`npm run verificar:n8n` devolve:
 
-Os testes automatizados interceptam a rede e usam respostas simuladas. Eles não validam a implantação real do n8n, CORS do seu domínio, permissões da credencial Google nem o conteúdo da planilha.
+| Código | Significado |
+|---|---|
+| 0 | todos os webhooks conectados |
+| 1 | alguma rota falhou |
+| 2 | nenhuma rota publicada (workflow inativo) |
+| 3 | esta máquina não alcançou o n8n (rede/TLS local) |
 
-## Roteiro de teste real no domínio de teste
+Pelo navegador, abra `diagnostico.html` publicado junto com o portal — é o mesmo
+teste, com o resultado na tela.
 
-1. Publicar HTMLs + `assets/` e confirmar nos DevTools que `n8n-api.js?v=1` carregou com HTTP 200.
-2. Abrir `dashboard.html`, `analise.html` ou `a1.html`.
-3. Na aba Network, conferir POST para `.../webhook/ler-planilha` com `spreadsheetId` correto.
-4. Conferir que a tabela/carregamento usa os dados retornados pelo n8n.
-5. No A1, editar um campo de uma linha de teste e conferir POST para `.../webhook/atualizar-celula`.
-6. Confirmar a alteração somente na cópia de teste da planilha.
-7. Simular webhook indisponível/404/CORS e conferir mensagem de erro, loader liberado e nenhuma segunda gravação no Apps Script.
-8. Conferir que login/solicitação de acesso continuam indo ao Apps Script e não ao n8n.
+## Roteiro de teste no domínio
+
+1. Publicar os HTMLs **e** a pasta `assets/`.
+2. Abrir `diagnostico.html` e confirmar `CONECTADO` nas duas rotas.
+3. Abrir `dashboard.html`, `analise.html` e `a1.html` e conferir, na aba Network,
+   POST para `.../webhook/ler-planilha` com o `spreadsheetId` correto.
+4. No A1, com um usuário que tenha permissão de edição, alterar um campo de uma
+   linha de teste e conferir POST para `.../webhook/atualizar-celula`.
+5. Confirmar a alteração somente na cópia de teste da planilha.
+6. Simular webhook indisponível/404/CORS e conferir a mensagem de erro, o loader
+   liberado e nenhuma segunda gravação no Apps Script.
+7. Confirmar que login/solicitação de acesso continuam indo ao Apps Script.
 
 ## Limitações conhecidas
 
-- A migração antiga para `obterConfigPagina`/permissões dinâmicas continua pendente; esta entrega não a conclui.
-- Ações ainda sem webhook continuam apontando para os Apps Scripts anteriores. Antes de testar escritas, garantir que esses endpoints também são de teste.
-- Os problemas históricos de segurança listados em `PROMPT_ANALISE_ERROS_BUGS.md` não foram todos resolvidos nesta tarefa.
-- Não foi feito deploy no site do usuário nem alteração direta em planilhas ou workflows n8n.
+- Os testes automatizados usam rede simulada: não provam CORS do seu domínio nem
+  permissões da credencial Google.
+- O workflow de exemplo lê as abas, mas a leitura das linhas precisa ser ligada
+  às colunas reais de cada tela.
+- `adicionar-linha` está reservado e sem uso.
+- A validação de permissão dentro das APIs individuais de cada página (Apps
+  Scripts separados) continua sendo um passo futuro; ver
+  `docs/PERMISSOES_VER_EDITAR.md`.

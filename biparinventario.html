@@ -71,8 +71,10 @@
   </div>
 </div>
 
-<script src="assets/js/n8n-api.js?v=1"></script>
+<script src="assets/js/n8n-api.js?v=3" data-exigir-permissoes></script>
+<script src="assets/js/portal-permissoes.js?v=1"></script>
 <script>
+// A aba Paginas (coluna API) prevalece quando configurada; este valor fica como reserva.
 const API_URL = 'https://script.google.com/macros/s/AKfycbwBYVga-nnSAa48v7SnpHVVp_1hFWzzWDohf12__bV6P2NqxpFD_vA-1yNKZQ-gqz0QGA/exec';
 let nomeUsuario = 'Desconhecido';
 let cacheIds = new Set();
@@ -113,7 +115,8 @@ function playSound(isSuccess) {
 
 async function callAPI(action, payload = {}) {
   return PortalN8N.callAPI(action, payload, async () => {
-    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, payload }) });
+    const paginaApi = await PortalPermissoes.apiDaPagina(API_URL);
+    const res = await fetch(paginaApi, { method: 'POST', body: JSON.stringify({ action, payload }) });
     return await res.json();
   });
 }

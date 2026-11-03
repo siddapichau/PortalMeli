@@ -4,22 +4,45 @@
 > permissões de ver/editar): ver [`continuidade/CONTINUIDADE.md`](continuidade/CONTINUIDADE.md)
 > para o estado atual, as regras da migração e a fila de arquivos pendentes.
 
-## Integração de teste com n8n
+## Integração com n8n — estado atual
 
-Os 22 HTMLs agora carregam a configuração compartilhada [`assets/js/n8n-api.js`](assets/js/n8n-api.js).
-As ações `getDashboardInit`, `obterDadosLogisticos`, `salvarEdicaoAnalise` e `salvarUsuario` têm rotas n8n; as demais continuam no Apps Script original até receberem um webhook próprio.
-Login, senhas, permissões e administração **não** foram enviados ao n8n.
+> **Resumo:** o n8n **não está 100% conectado**. Os webhooks `ler-planilha` e
+> `atualizar-celula` respondem 404 "not registered" — falta importar e **ativar**
+> o workflow. Guia completo e como resolver:
+> [`docs/INTEGRACAO_N8N.md`](docs/INTEGRACAO_N8N.md).
 
-- Guia completo, contratos JSON e roteiro de teste: [`docs/INTEGRACAO_N8N.md`](docs/INTEGRACAO_N8N.md).
-- Ao publicar, enviar os HTMLs **e** a pasta `assets/`.
-- Uma escrita que falhar no n8n não é repetida automaticamente no Apps Script, para evitar duplicação.
-- A validação local usa respostas simuladas; a implantação real do n8n/CORS ainda precisa ser testada no domínio.
+As planilhas do portal usam o n8n por meio do adaptador compartilhado
+[`assets/js/n8n-api.js`](assets/js/n8n-api.js); as demais ações continuam no Apps
+Script original. Login, senhas, permissões e administração **não** vão para o n8n.
+
+Permissões de ver/editar em todas as 18 páginas de ferramenta:
+[`docs/PERMISSOES_VER_EDITAR.md`](docs/PERMISSOES_VER_EDITAR.md).
+
+### Verificar a conexão (de verdade)
 
 ```bash
 npm ci
-npm run check   # lint + sintaxe dos HTMLs + testes unitários/integração + Chromium
-npm start       # preview estático em http://localhost:3000/login.html
+npm run verificar:n8n     # consulta os webhooks publicados e diz o que falta
+npm run check             # lint + sintaxe + testes + navegador
 ```
+
+Pelo navegador, publique e abra `diagnostico.html`: ele mostra `CONECTADO` ou
+`NÃO PUBLICADO` para cada rota, sem gravar dados na planilha.
+
+### O que publicar
+
+Enviar **todos os HTMLs e a pasta `assets/`**. Se apenas os HTMLs forem enviados,
+as páginas não encontram `PortalN8N` nem `PortalPermissoes`. Ao alterar um JS de
+`assets/`, atualize o parâmetro de versão (`?v=2`) nos HTMLs ou invalide o cache.
+
+### Garantias
+
+- Escrita que falha no n8n **não** é repetida no Apps Script (evita gravação dupla).
+- Sem permissão de edição, a página abre em modo somente leitura e a escrita é
+  bloqueada antes de qualquer requisição.
+- Sem permissão de ver, a página não abre.
+- Se a validação de permissão falhar, a página abre em somente leitura (falha
+  fechada), nunca liberando edição.
 
 ## Arquivos usados em produção
 

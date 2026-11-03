@@ -2,14 +2,73 @@
  * Integração de teste com n8n, compartilhada pelos HTMLs do PortalMeli.
  * Este arquivo não contém credenciais. A autorização deve ser validada no backend.
  * Ações sem webhook continuam no Apps Script por meio do fallback da própria página.
+ *
+ * Regra de permissão (ver/editar):
+ * - Este adaptador não decide sozinho quem pode editar. Ele consulta a política
+ *   publicada por `assets/js/portal-permissoes.js` (global `PortalPermissoes`).
+ * - Sem política carregada, nada muda (compatibilidade com telas antigas/testes).
+ * - Com política carregada, a checagem acontece ANTES de qualquer requisição,
+ *   inclusive antes do fallback para o Apps Script. Assim uma ação de escrita
+ *   não escapa por um caminho alternativo.
  */
 (function (global) {
   'use strict';
+
+  /*
+   * Reserva de segurança para PÁGINAS DE FERRAMENTA.
+   *
+   * Essas páginas marcam a tag como `data-exigir-permissoes`. Se
+   * `assets/js/portal-permissoes.js` não carregar (arquivo não publicado, cache
+   * antigo, 404), a página não pode ficar sem controle de escrita: esta reserva
+   * libera somente leitura. O arquivo real substitui o objeto ao carregar.
+   *
+   * Telas de autenticação e administração (login, portal, admin, limpar,
+   * diagnostico) NÃO têm a marca e seguem funcionando como antes.
+   */
+  const tagAtual = global.document && global.document.currentScript;
+  const exigePermissoes = Boolean(tagAtual && typeof tagAtual.hasAttribute === 'function' &&
+    tagAtual.hasAttribute('data-exigir-permissoes'));
+
+  if (exigePermissoes && !global.PortalPermissoes) {
+    const aviso = 'Arquivo de permissões não carregado: a página ficará em modo somente leitura.';
+    const erroLeitura = () => {
+      const erro = new Error(aviso);
+      erro.name = 'PermissaoIndisponivelError';
+      erro.code = 'SOMENTE_LEITURA';
+      return erro;
+    };
+    const leitura = /^(get|listar|ler|obter|buscar|verificar|consultar|carregar|comparar|estatisticas)/i;
+    global.PortalPermissoes = Object.freeze({
+      iniciar: async () => ({ carregado: true, podeVer: true, podeEditar: false, somenteLeitura: true }),
+      estado: () => ({ carregado: true, podeVer: true, podeEditar: false, somenteLeitura: true, bloqueado: false }),
+      podeVer: () => true,
+      podeEditar: () => false,
+      somenteLeitura: () => true,
+      carregado: () => true,
+      podeExecutarAcao: acao => {
+        if (leitura.test(String(acao || ''))) return true;
+        throw erroLeitura();
+      },
+      exigirEdicao: () => { throw erroLeitura(); },
+      classificarAcao: acao => (leitura.test(String(acao || '')) ? 'leitura' : 'escrita'),
+      classificarHandler: () => 'desconhecido',
+      handlerDeEscrita: () => true,
+      planilhaIdDaPagina: () => '',
+      apiDaPagina: async padrao => padrao,
+      modoLeitura: () => {},
+      bloquear: () => {},
+      resetarEstado: () => {}
+    });
+    if (global.console && typeof global.console.warn === 'function') {
+      global.console.warn(aviso);
+    }
+  }
 
   // ID confirmado pelo usuário: cópia de teste registrada na continuidade.
   const ID_PLANILHA = '1VgC0r0XBoD7MPdKi_eoORX73ETdcndzwpaIHV6Srx9Y';
   const N8N_BASE_URL = 'https://portalmeli.app.n8n.cloud/webhook/';
   const TIMEOUT_MS = 45000;
+  const PADRAO_ID_PLANILHA = /^[A-Za-z0-9_-]{20,}$/;
 
   // Somente rotas explicitamente definidas. Não inferir endpoints de escrita.
   const WEBHOOKS = Object.freeze({
@@ -18,6 +77,39 @@
     salvarEdicaoAnalise: 'atualizar-celula',
     salvarUsuario: 'adicionar-linha'
   });
+
+  /**
+   * Devolve a política de permissões carregada na página, se existir.
+   * @returns {{podeExecutarAcao: Function, planilhaIdDaPagina?: Function}|null}
+   */
+  function politicaDePermissoes() {
+    const politica = global.PortalPermissoes;
+    if (!politica || typeof politica.podeExecutarAcao !== 'function') return null;
+    return politica;
+  }
+
+  /**
+   * Aplica a política antes de qualquer chamada de backend.
+   * A própria política lança o erro (a página exibe a mensagem ao usuário).
+   * @param {string} action
+   */
+  function checarPermissao(action) {
+    const politica = politicaDePermissoes();
+    if (!politica) return;
+    politica.podeExecutarAcao(action);
+  }
+
+  /**
+   * A planilha do n8n pode ser definida por página na aba Paginas (coluna Planilha).
+   * Sem configuração válida, mantém o ID de teste padrão.
+   * @returns {string}
+   */
+  function planilhaDaPagina() {
+    const politica = politicaDePermissoes();
+    if (!politica || typeof politica.planilhaIdDaPagina !== 'function') return ID_PLANILHA;
+    const id = politica.planilhaIdDaPagina();
+    return typeof id === 'string' && PADRAO_ID_PLANILHA.test(id) ? id : ID_PLANILHA;
+  }
 
   /**
    * Mantém o contrato de cada tela: devolve o JSON sem renomear seus campos.
@@ -35,6 +127,9 @@
       throw new TypeError('Informe uma ação válida para a API.');
     }
 
+    // Bloqueia escrita sem permissão antes de qualquer rede (n8n ou Apps Script).
+    checarPermissao(action);
+
     const endpoint = Object.hasOwn(WEBHOOKS, action) ? WEBHOOKS[action] : '';
     if (!endpoint) {
       if (typeof legacyCall !== 'function') {
@@ -48,7 +143,7 @@
     }
 
     // O ID configurado sempre prevalece, mesmo se o payload contiver outro ID.
-    const bodyData = { ...payload, spreadsheetId: ID_PLANILHA };
+    const bodyData = { ...payload, spreadsheetId: planilhaDaPagina() };
     const controller = new AbortController();
     let timedOut = false;
     const timeoutId = setTimeout(() => {

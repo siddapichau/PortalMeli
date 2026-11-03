@@ -1,0 +1,244 @@
+{
+  "name": "PortalMeli — planilhas (ler-planilha / atualizar-celula)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ler-planilha",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Webhook ler-planilha",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        -120
+      ],
+      "webhookId": "a1000000-0000-4000-8000-000000000001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lê a planilha e devolve o contrato consumido por dashboard.html, analise.html e a1.html.\n// Requer a credencial Google Sheets configurada no nó seguinte.\nconst body = $input.first().json.body || $input.first().json;\nconst spreadsheetId = String(body.spreadsheetId || '').trim();\nif (!/^[A-Za-z0-9_-]{30,60}$/.test(spreadsheetId)) {\n  return [{ json: { erro: 'Informe o spreadsheetId da planilha.' } }];\n}\nconst abaSolicitada = String(body.nomeAba || '').trim();\nreturn [{ json: { spreadsheetId, abaSolicitada } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Validar entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "getMany",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Google Sheets (abas)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -80,
+        -120
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "SUBSTITUA_PELA_CREDENCIAL",
+          "name": "Google Sheets — planilha de teste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Monta a resposta no contrato esperado pelo frontend.\nconst abas = $input.all().map(item => item.json.title || item.json.name || '').filter(Boolean);\nconst abaAtiva = $('Validar entrada').first().json.abaSolicitada || abas[0] || '';\nreturn [{\n  json: {\n    abaAtiva,\n    abas,\n    dadosCompletos: [],\n    dadosDashboard: [],\n    avisos: ['Workflow padrão: conecte a leitura da aba escolhida ao nó \"Ler aba\" antes de usar em produção.']\n  }\n}];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Montar resposta ler-planilha",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        140,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Responder ler-planilha",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        360,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "atualizar-celula",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Webhook atualizar-celula",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        140
+      ],
+      "webhookId": "a1000000-0000-4000-8000-000000000006"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida o payload de escrita. `id` é o número da linha na aba informada (campo _idNum das telas).\nconst body = $input.first().json.body || $input.first().json;\nconst spreadsheetId = String(body.spreadsheetId || '').trim();\nconst nomeAba = String(body.nomeAba || '').trim();\nconst coluna = String(body.coluna || '').trim();\nconst id = body.id;\nif (!/^[A-Za-z0-9_-]{30,60}$/.test(spreadsheetId)) {\n  return [{ json: { erro: 'Informe o spreadsheetId da planilha.' } }];\n}\nif (!nomeAba || !coluna || id === undefined || id === null || id === '') {\n  return [{ json: { erro: 'Informe nomeAba, id e coluna para atualizar a célula.' } }];\n}\nreturn [{ json: { spreadsheetId, nomeAba, id, coluna, valor: body.valor === undefined ? '' : body.valor } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Validar escrita",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Depois de gravar (nó Google Sheets \"Update\"), responda sucesso ou erro de negócio.\n// As telas leem o campo `erro`; responda HTTP 4xx/5xx em caso de falha real.\nreturn [{ json: { success: true } }];"
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Montar resposta atualizar-celula",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        140,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000009",
+      "name": "Responder atualizar-celula",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        360,
+        140
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook ler-planilha": {
+      "main": [
+        [
+          {
+            "node": "Validar entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar entrada": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets (abas)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets (abas)": {
+      "main": [
+        [
+          {
+            "node": "Montar resposta ler-planilha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar resposta ler-planilha": {
+      "main": [
+        [
+          {
+            "node": "Responder ler-planilha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook atualizar-celula": {
+      "main": [
+        [
+          {
+            "node": "Validar escrita",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar escrita": {
+      "main": [
+        [
+          {
+            "node": "Montar resposta atualizar-celula",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar resposta atualizar-celula": {
+      "main": [
+        [
+          {
+            "node": "Responder atualizar-celula",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -8,6 +8,16 @@ import chromium, { inflate, setupLambdaEnvironment } from '@sparticuz/chromium';
 import { createStaticServer } from '../../scripts/serve.mjs';
 import { ROOT, ID_PLANILHA, N8N_BASE_URL, htmlFiles, read } from '../helpers.mjs';
 
+// API central simulada (Apps Script): responde obterConfigPagina nos testes.
+const API_CENTRAL = 'https://apps-script.test/exec';
+const CONFIG_EDITAR = { podeVer: true, podeEditar: true, planilha: '', api: '' };
+const CONFIG_VER = { podeVer: true, podeEditar: false, planilha: '', api: '' };
+
+/** URL de Apps Script declarada na própria página (fallback do adaptador). */
+function pageApiUrl(filename) {
+  return read(filename).match(/const API_URL = '([^']+)'/)[1];
+}
+
 let server;
 let browser;
 let origin;
@@ -38,8 +48,15 @@ async function openPage(filename, handlers = {}) {
   const context = await browser.newContext();
   const page = await context.newPage();
   const pageErrors = [];
-  const calls = { n8n: [], legacy: [], preflight: [] };
+  const calls = { n8n: [], legacy: [], preflight: [], config: [] };
   page.on('pageerror', error => pageErrors.push(error.message));
+  if (handlers.session) {
+    await page.addInitScript(({ apiUrl, token, arquivo }) => {
+      window.localStorage.setItem('apiUrl', apiUrl);
+      if (token) window.localStorage.setItem('token', token);
+      if (arquivo) window.__arquivoTeste = arquivo;
+    }, { apiUrl: API_CENTRAL, token: handlers.session.token ?? '', arquivo: handlers.session.arquivo ?? '' });
+  }
   await page.addInitScript(() => {
     window.__swalCalls = [];
     window.Swal = {
@@ -62,11 +79,11 @@ async function openPage(filename, handlers = {}) {
       calls.preflight.push(url.href);
       return route.fulfill({ status: 204, headers: cors, body: '' });
     }
-    if (url.href.startsWith(N8N_BASE_URL) || url.hostname === 'script.google.com') {
+    if (url.href.startsWith(N8N_BASE_URL) || url.hostname === 'script.google.com' || url.href === API_CENTRAL) {
       const call = { url: url.href, method: request.method(), headers: request.headers(), body: request.postDataJSON() };
-      const isN8N = url.href.startsWith(N8N_BASE_URL);
-      calls[isN8N ? 'n8n' : 'legacy'].push(call);
-      const handler = handlers[isN8N ? 'n8n' : 'legacy'];
+      const canal = url.href === API_CENTRAL ? 'config' : url.href.startsWith(N8N_BASE_URL) ? 'n8n' : 'legacy';
+      calls[canal].push(call);
+      const handler = handlers[canal];
       const result = handler ? await handler(call) : { ok: true, data: [] };
       const explicitStatus = typeof result.status === 'number';
       return route.fulfill({
@@ -92,7 +109,7 @@ const dashboardRow = {
   Responsabilidade: 'SERVICE', Turno: 'MANHA', Valor_Real: '10,00'
 };
 
-test('servidor entrega o adaptador e os 22 HTMLs, sem expor arquivos internos', async () => {
+test('servidor entrega o adaptador e os 23 HTMLs, sem expor arquivos internos', async () => {
   const asset = await fetch(`${origin}/assets/js/n8n-api.js?v=1`);
   assert.equal(asset.status, 200);
   assert.match(asset.headers.get('content-type'), /javascript/);
@@ -152,6 +169,8 @@ test('solicitação de acesso também permanece no Apps Script', async () => {
 
 test('a1 carrega dados do webhook, renderiza a tabela e envia edição ao webhook de célula', async () => {
   const { context, page, calls, pageErrors } = await openPage('a1.html', {
+    session: { token: 'token-teste' },
+    config: () => ({ ok: true, data: CONFIG_EDITAR }),
     n8n: call => call.url.endsWith('/ler-planilha')
       ? { dadosCompletos: [dashboardRow], abaAtiva: 'Base Teste' }
       : { success: true },
@@ -173,8 +192,11 @@ test('a1 carrega dados do webhook, renderiza a tabela e envia edição ao webhoo
     });
     const legacy = await page.evaluate(() => window.callAPI('carregarBackground', { abasParaCarregar: ['Base Teste'] }));
     assert.deepEqual(legacy, { cache: {} });
-    assert.equal(calls.legacy.length, 1);
-    assert.deepEqual(calls.legacy[0].body, { action: 'carregarBackground', abasParaCarregar: ['Base Teste'] });
+    const legado = calls.legacy.at(-1);
+    assert.equal(legado.url, pageApiUrl('a1.html'));
+    assert.deepEqual(legado.body, { action: 'carregarBackground', abasParaCarregar: ['Base Teste'] });
+    assert.equal(calls.config.length, 1);
+    assert.deepEqual(calls.config[0].body, { action: 'obterConfigPagina', token: 'token-teste', arquivo: 'a1.html' });
     assert.deepEqual(pageErrors, []);
   } finally {
     await context.close();
@@ -183,6 +205,8 @@ test('a1 carrega dados do webhook, renderiza a tabela e envia edição ao webhoo
 
 test('a1 mostra erro de leitura do n8n e não consulta a API antiga como fallback', async () => {
   const { context, page, calls, pageErrors } = await openPage('a1.html', {
+    session: { token: 'token-teste' },
+    config: () => ({ ok: true, data: CONFIG_EDITAR }),
     n8n: () => ({ status: 503, data: { erro: 'indisponível' } })
   });
   try {
@@ -205,6 +229,137 @@ test('limpar.html carrega a configuração sem fazer nenhuma chamada de backend'
     await page.locator('#limpar').click();
     assert.equal(calls.n8n.length, 0);
     assert.equal(calls.legacy.length, 0);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('em somente leitura a tela de ferramenta não envia nenhuma escrita para n8n nem Apps Script', async () => {
+  const { context, page, calls, pageErrors } = await openPage('a1.html', {
+    session: { token: 'token-teste' },
+    config: () => ({ ok: true, data: CONFIG_VER }),
+    n8n: call => call.url.endsWith('/ler-planilha')
+      ? { dadosCompletos: [dashboardRow], abaAtiva: 'Base Teste' }
+      : { success: true },
+    legacy: () => ({ cache: {} })
+  });
+  try {
+    await page.waitForFunction(() => document.getElementById('contador-linhas').textContent === '1 de 1 linhas');
+    const estado = await page.evaluate(() => window.PortalPermissoes.estado());
+    assert.equal(estado.podeEditar, false);
+    assert.equal(estado.somenteLeitura, true);
+    assert.ok(await page.evaluate(() => document.documentElement.classList.contains('pm-somente-leitura')));
+
+    // Tenta editar a célula pelo adaptador da própria página.
+    const erro = await page.evaluate(() => window.callAPI('salvarEdicaoAnalise', {
+      id: '42', coluna: 'Observacoes', valor: 'não deveria gravar', nomeAba: 'Base Teste'
+    }).then(() => null, e => e.message));
+    assert.match(erro, /somente leitura/i);
+
+    // Duplo clique na linha (o caminho real do usuário) precisa ser bloqueado.
+    await page.locator('#tabela-corpo tr').first().dblclick();
+    const avisos = await page.evaluate(() => window.__swalCalls);
+    assert.ok(avisos.some(args => JSON.stringify(args).includes('somente leitura')), 'o duplo clique deveria avisar sobre o modo somente leitura');
+    assert.equal(await page.locator('.swal2-popup').count(), 0, 'o modal de edição não pode abrir');
+
+    // Nada de escrita saiu: só o POST de leitura no n8n e a consulta de permissão.
+    assert.equal(calls.n8n.length, 1);
+    assert.equal(calls.n8n[0].url, N8N_BASE_URL + 'ler-planilha');
+    assert.equal(calls.legacy.filter(call => call.body?.action === 'salvarEdicaoAnalise').length, 0);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('podeVer=false bloqueia a página inteira e nenhuma leitura é feita', async () => {
+  const { context, page, calls, pageErrors } = await openPage('avarias.html', {
+    session: { token: 'token-teste' },
+    config: () => ({ ok: false, error: 'Você não tem permissão para acessar esta página.' })
+  });
+  try {
+    await page.waitForFunction(() => document.body.textContent.includes('Acesso não permitido'));
+    assert.match(await page.locator('body').textContent(), /não tem permissão/i);
+    assert.equal(calls.n8n.length, 0);
+    assert.equal(calls.legacy.length, 0);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('sem sessão a ferramenta abre em somente leitura e avisa o usuário', async () => {
+  const { context, page, calls, pageErrors } = await openPage('semidciclos2.html', {
+    session: { token: '' },
+    legacy: () => ({ ok: true, data: [] })
+  });
+  try {
+    await page.waitForFunction(() => document.getElementById('pm-aviso-permissao')?.textContent.length > 0);
+    const estado = await page.evaluate(() => window.PortalPermissoes.estado());
+    assert.equal(estado.somenteLeitura, true);
+    assert.equal(estado.podeEditar, false);
+    const erro = await page.evaluate(() => window.callAPI('salvarItem', { item: { ID: 1 } }).then(() => null, e => e.message));
+    assert.match(erro, /somente leitura/i);
+    assert.equal(calls.legacy.filter(call => call.body?.action === 'salvarItem').length, 0);
+    assert.equal(calls.config.length, 0, 'sem token não deve consultar a API central');
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('modo=ver na URL mantém a leitura e bloqueia a escrita, sem consultar a API central', async () => {
+  const { context, page, calls, pageErrors } = await openPage('avarias.html?modo=ver', {
+    session: { token: 'token-teste' },
+    legacy: () => ({ ok: true, dados: [] })
+  });
+  try {
+    await page.waitForFunction(() => window.PortalPermissoes?.estado().carregado === true);
+    const estado = await page.evaluate(() => window.PortalPermissoes.estado());
+    assert.equal(estado.podeEditar, false);
+    assert.equal(estado.somenteLeitura, true);
+    assert.equal(calls.config.length, 0);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a planilha configurada na aba Paginas é usada pelo adaptador n8n', async () => {
+  const planilhaDaPagina = '1co3KfvzbAc_Jdt5lf7D_optZWlG8EPYxIsLKk4Q9rOk';
+  const { context, page, calls, pageErrors } = await openPage('a1.html', {
+    session: { token: 'token-teste' },
+    config: () => ({ ok: true, data: { podeVer: true, podeEditar: true, planilha: planilhaDaPagina, api: '' } }),
+    n8n: () => ({ dadosCompletos: [], abaAtiva: 'Base Teste' }),
+    legacy: () => ({ cache: {} })
+  });
+  try {
+    await page.waitForFunction(() => window.PortalPermissoes?.estado().carregado === true);
+    await page.evaluate(() => window.callAPI('getDashboardInit'));
+    const leitura = calls.n8n.filter(call => call.url.endsWith('/ler-planilha'));
+    assert.ok(leitura.length >= 1);
+    assert.equal(leitura.at(-1).body.spreadsheetId, planilhaDaPagina);
+    assert.deepEqual(pageErrors, []);
+  } finally {
+    await context.close();
+  }
+});
+
+test('diagnostico.html classifica webhook publicado e não publicado pelo n8n', async () => {
+  const { context, page, calls, pageErrors } = await openPage('diagnostico.html', {
+    n8n: call => call.url.endsWith('/ler-planilha')
+      ? { abas: ['Base Teste'], abaAtiva: 'Base Teste', dadosCompletos: [], dadosDashboard: [] }
+      : { status: 404, data: { code: 404, message: 'The requested webhook "atualizar-celula" is not registered.' } }
+  });
+  try {
+    await page.locator('#executar').click();
+    await page.waitForFunction(() => document.getElementById('resumo').textContent.includes('Integração parcial'));
+    const texto = await page.locator('#corpo').textContent();
+    assert.match(texto, /CONECTADO/);
+    assert.match(texto, /NÃO PUBLICADO/);
+    assert.equal(calls.n8n.length, 2);
+    assert.equal(calls.n8n[0].body.spreadsheetId, ID_PLANILHA);
     assert.deepEqual(pageErrors, []);
   } finally {
     await context.close();
